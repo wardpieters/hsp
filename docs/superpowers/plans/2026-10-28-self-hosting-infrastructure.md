@@ -60,9 +60,9 @@
 
 **Interfaces:** host helper has explicit `check`, `install`, and `remove` operations for a managed wildcard file/include and aggregate route; filesystem root/command runner are injectable for tests. Terraform manages dedicated desired-config files and invokes the helper on changes; refresh checks surface effective file drift. No full Pi-hole config enters state.
 
-- [ ] Write failing tests using temporary files: preserve unrelated TOML/directives, reject conflicting wildcard owners, rollback on validation/reload failure, remove includes safely, validate private aggregate and prevent injection.
-- [ ] Implement bounded idempotent operations, atomic file replacement/backups, host-key-verified SSH/file configuration, reboot persistence, and validated reload triggers.
-- [ ] Run all host-helper tests, Terraform validation/mock tests where feasible, and commit.
+- [x] Write failing tests using temporary files: preserve unrelated TOML/directives, reject conflicting wildcard owners, rollback on validation/reload failure, remove includes safely, validate private aggregate and prevent injection.
+- [x] Implement bounded idempotent operations, atomic file replacement/backups, host-key-verified SSH/file configuration, reboot persistence, and validated reload triggers.
+- [x] Run all host-helper tests, Terraform validation/mock tests where feasible, and commit.
 
 ### Task 4: Guarded Terraform plan/apply/activation
 
