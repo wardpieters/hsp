@@ -177,12 +177,13 @@ def private_plan_directory():
         yield Path(directory)
 
 
-def host_preflight():
+def host_preflight(context):
     target = os.environ.get("HSP_PROXMOX_SSH", "")
     if not re.fullmatch(r"[A-Za-z0-9_.-]+@[A-Za-z0-9_.-]+", target):
         raise ValueError("Set HSP_PROXMOX_SSH=user@host for the verified host routing preflight")
+    cidr = str(ipaddress.IPv4Network(context["platform_cidr"], strict=True))
     subprocess.run(["ssh", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes", target,
-                    "sudo", "-n", "/usr/bin/python3", "/usr/local/sbin/hsp-host-config-proxmox", "check", "proxmox", "/etc/hsp-proxmox.json"], check=True)
+                    "sudo", "-n", "/usr/bin/python3", "/usr/local/sbin/hsp-host-config-proxmox", "check", "proxmox", "/etc/hsp-proxmox.json", "--expected-cidr", cidr], check=True)
 
 
 def main():
@@ -213,7 +214,7 @@ def main():
                 raise ValueError("Apply cancelled")
             if args.action == "activate":
                 context = plan["planned_values"]["outputs"]["activation_context"]["value"]
-                host_preflight()
+                host_preflight(context)
                 verify_activation(plan, ProxmoxAPI(context["endpoint"], os.environ.get("PROXMOX_VE_API_TOKEN")))
             subprocess.run(command + ["apply", "-input=false", "-parallelism=1", str(planfile)], check=True)
     except (ValueError, subprocess.CalledProcessError, EOFError) as error:

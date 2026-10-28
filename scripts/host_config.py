@@ -177,10 +177,13 @@ def main():
     parser.add_argument("action", choices=["install", "remove", "check"])
     parser.add_argument("kind", choices=["proxmox", "pihole"])
     parser.add_argument("config", type=Path)
+    parser.add_argument("--expected-cidr", help="Require the route aggregate to match the home environment")
     args = parser.parse_args()
     if os.geteuid() != 0:
         parser.error("Run this bounded host helper as root")
     config = json.loads(args.config.read_text())
+    if args.expected_cidr and (args.kind != "proxmox" or private_network(args.expected_cidr) != private_network(config["platform_cidr"])):
+        parser.error("The host route aggregate differs from the home environment")
     with open("/run/lock/hsp-" + args.kind + ".lock", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         if args.action == "check":

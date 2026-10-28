@@ -43,3 +43,4 @@ module "dns" {
 output "address" { value = var.network.address }
 output "vm_id" { value = module.vm.vm_id }
 output "names" { value = module.dns.names }
+output "rules" { value = module.vm.rules }

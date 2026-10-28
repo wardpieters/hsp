@@ -1,0 +1,53 @@
+# Illustrative inventory only. Replace these values after inspecting your network.
+# Copy to home.tfvars (ignored by Git). Keep credentials in environment variables.
+proxmox_endpoint     = "https://192.168.50.10:8006/"
+pihole_url           = "https://192.168.50.53"
+node_name            = "pve"
+host_address         = "192.168.50.10"
+platform_cidr        = "10.77.0.0/24"
+protected_cidrs      = ["192.168.50.0/24", "10.78.0.0/24", "10.79.0.0/24"]
+bootstrap_admin_cidrs = ["192.168.50.42/32"]
+manage_host_firewall = false # Opt in only after reviewing/importing existing rules.
+dns_servers         = ["192.168.50.53"]
+ntp_servers         = ["192.168.50.1"] # Must actually provide NTP; replace if it doesn't.
+template_id         = 9000
+datastore_id        = "local-lvm"
+ssh_public_keys     = ["REPLACE_WITH_YOUR_SSH_PUBLIC_KEY"]
+private_proxy_name  = "proxy-private"
+
+# New guests start stopped, without autostart. Configure VPN/proxy software later.
+guests = {
+  vpn-admin = {
+    vm_id = 110, slot = 0, vnet_id = "hsp110", role = "admin_vpn"
+    public_ports = [{ protocol = "udp", port = 51820 }]
+    allow_updates = true
+  }
+  vpn-family = {
+    vm_id = 111, slot = 1, vnet_id = "hsp111", role = "service_vpn"
+    public_ports = [{ protocol = "udp", port = 51821 }]
+    allow_updates = true
+  }
+  proxy-public = {
+    vm_id = 112, slot = 2, vnet_id = "hsp112", role = "public_proxy"
+    public_ports = [{ protocol = "tcp", port = 80 }, { protocol = "tcp", port = 443 }]
+    allow_updates = true
+  }
+  proxy-private = {
+    vm_id = 113, slot = 3, vnet_id = "hsp113", role = "private_proxy"
+    allow_updates = true
+  }
+  cloud = {
+    vm_id = 114, slot = 4, vnet_id = "hsp114"
+    dns = { cloud = { mode = "proxy", proxy_name = "proxy-private" }, cloud-host = { mode = "direct" } }
+    allow_updates = true
+  }
+  web = {
+    vm_id = 115, slot = 5, vnet_id = "hsp115"
+    dns = { web = { mode = "proxy", proxy_name = "proxy-public" } }
+    allow_updates = true
+  }
+}
+connections = [
+  { from = "proxy-private", to = "cloud", protocol = "tcp", port = 8080 },
+  { from = "proxy-public", to = "web", protocol = "tcp", port = 8080 },
+]

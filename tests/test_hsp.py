@@ -1,6 +1,10 @@
 import copy
 import importlib.util
+import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -99,6 +103,27 @@ class GuardTests(unittest.TestCase):
         with self.hsp.private_plan_directory() as path:
             self.assertEqual(Path(path).stat().st_mode & 0o777, 0o700)
         self.assertFalse(Path(path).exists())
+
+    def test_cli_applies_only_a_checked_stopped_plan(self):
+        for running, expected in [(True, 1), (False, 0)]:
+            with self.subTest(running=running), tempfile.TemporaryDirectory() as directory:
+                folder = Path(directory)
+                plan = fixture()
+                plan["resource_changes"][0]["change"]["after"]["started"] = running
+                marker = folder / "applied"
+                fake = folder / "terraform"
+                fake.write_text("#!" + sys.executable + "\nimport sys,pathlib\n"
+                                "if 'show' in sys.argv: print(" + repr(json.dumps(plan)) + ")\n"
+                                "if 'apply' in sys.argv: pathlib.Path(" + repr(str(marker)) + ").touch()\n")
+                fake.chmod(0o755)
+                variables = folder / "private.tfvars"
+                variables.write_text("")
+                environment = dict(os.environ, PATH=str(folder) + os.pathsep + os.environ.get("PATH", ""))
+                result = subprocess.run([sys.executable, str(SCRIPT), "apply", "--directory", str(folder),
+                                         "--var-file", str(variables), "--yes"], env=environment,
+                                        capture_output=True, text=True)
+                self.assertEqual(result.returncode, expected, result.stderr)
+                self.assertEqual(marker.exists(), not running)
 
     def test_activation_accepts_verified_existing_enforcement(self):
         p = fixture()

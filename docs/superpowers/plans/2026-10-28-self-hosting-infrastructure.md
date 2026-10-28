@@ -80,11 +80,12 @@
 
 **Interfaces:** one map of named guests with explicit VM ID/VNet/slot/role, optional proxy/backend dependencies, and DNS entries. Outputs include route instructions, public forward inventory, guest addresses, and activation status. The environment's lifecycle can be used through Task 4's CLI.
 
-- [ ] Add composition tests for duplicate IDs/slots/names and paired backend ingress/egress, then watch them fail.
-- [ ] Implement the environment, role-aware rules, example bootstrap/stopped then activation inventories, and separate host-state configuration.
-- [ ] Document exact init/plan/provision/activate/import/recovery commands and which live checks remain unverified.
-- [ ] Run `terraform fmt -check -recursive`, every environment/module validation and Terraform test, `python3 -m unittest discover -s tests -v`, and CLI smoke checks. Commit only source/lock/docs.
+- [x] Add composition tests for duplicate IDs/slots/names and paired backend ingress/egress, then watch them fail.
+- [x] Implement the environment, role-aware rules, example bootstrap/stopped then activation inventories, and separate host-state configuration.
+- [x] Document exact init/plan/provision/activate/import/recovery commands and which live checks remain unverified.
+- [x] Run `terraform fmt -check -recursive`, every environment/module validation and Terraform test, `python3 -m unittest discover -s tests -v`, and CLI smoke checks. Commit only source/lock/docs.
 - [ ] Dispatch one independent whole-branch review; fix important findings with failing regression tests, rerun the full suite, and report remaining live-deployment prerequisites.
+
 
 ## Execution decision
 
