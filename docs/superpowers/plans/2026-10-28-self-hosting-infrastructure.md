@@ -50,9 +50,9 @@
 
 **Interfaces:** `vm` accepts explicit identity/template/network settings plus ordered allow rules, protected ranges, approved resolvers/NTP, and update/public profiles. It produces VM ID and policy. `dns_records(records: map({address:string,mode:string,proxy_address:optional(string)}), domain)` produces owned FQDNs. `service_vm` composes Task 1 networking and those modules, exposing guest address and activation metadata.
 
-- [ ] Write tests for stopped creation, guest/NIC firewall flags, exact anti-spoofing address, protected-range order, IPv6 blocking, DNS target selection, invalid names, and missing proxy targets; watch expected failures.
-- [ ] Implement supported native VM, firewall options, IP set, rule, and Pi-hole record resources with stable keys.
-- [ ] Test only API boundaries with mock providers, while asserting actual derived arguments and policy order; run validation and commit.
+- [x] Write tests for stopped creation, guest/NIC firewall flags, exact anti-spoofing address, protected-range order, IPv6 blocking, DNS target selection, invalid names, and missing proxy targets; watch expected failures.
+- [x] Implement supported native VM, firewall options, IP set, rule, and Pi-hole record resources with stable keys.
+- [x] Test only API boundaries with mock providers, while asserting actual derived arguments and policy order; run validation and commit.
 
 ### Task 3: Persistent Proxmox routing and Pi-hole wildcard ownership
 
