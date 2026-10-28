@@ -19,3 +19,5 @@ __pycache__/
 .superpowers/
 .worktrees/
 .DS_Store
+
+modules/**/.terraform.lock.hcl

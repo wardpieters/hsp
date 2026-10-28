@@ -39,10 +39,10 @@
 
 **Interfaces:** `platform_network(platform_cidr, node_name, zone_id, protected_cidrs)` produces zone identity and route CIDR. `guest_network(platform_cidr, slot, zone_id, node_name, vnet_id)` produces `cidr`, `gateway`, `address`, `vnet_id`. Allocate with `cidrsubnet` to prefix 30; no order-based indexing.
 
-- [ ] Write mock-provider plan tests asserting slot 3 of `10.77.0.0/24` produces `10.77.0.12/30`, gateway `.13`, guest `.14`, and invalid bounds/overlap fail.
-- [ ] Run the tests against absent/minimal modules and record the expected failure.
-- [ ] Implement the validated zone/VNet/subnet resources and documented SDN apply handling.
-- [ ] Run module validation/tests and commit the deliverable.
+- [x] Write mock-provider plan tests asserting slot 3 of `10.77.0.0/24` produces `10.77.0.12/30`, gateway `.13`, guest `.14`, and invalid bounds/overlap fail.
+- [x] Run the tests against absent/minimal modules and record the expected failure.
+- [x] Implement the validated zone/VNet/subnet resources and documented SDN apply handling.
+- [x] Run module validation/tests and commit the deliverable.
 
 ### Task 2: Guest firewall and automatic DNS composition
 
