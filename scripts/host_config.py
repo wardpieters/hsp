@@ -155,6 +155,8 @@ def configure_proxmox(config, runner=run, remove=False):
 def check(config, kind, root=Path("/"), runner=run):
     if kind == "proxmox":
         cidr = private_network(config["platform_cidr"])
+        if "enabled/running" not in runner(["pve-firewall", "status"]):
+            raise ValueError("The established firewall is not enabled and running")
         routes = json.loads(runner(["ip", "-j", "-4", "route", "show", "exact", cidr]))
         if runner(["sysctl", "-n", "net.ipv4.ip_forward"]) != "1" or not any(r.get("type") == "blackhole" and r.get("metric") == 42760 for r in routes):
             raise ValueError("Persistent forwarding/aggregate blackhole is not active")

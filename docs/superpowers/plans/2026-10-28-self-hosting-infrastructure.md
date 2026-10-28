@@ -70,9 +70,9 @@
 
 **Interfaces:** `validate_plan(plan: dict) -> list[str]` returns blocking errors; `verify_activation(plan:dict, api_client) -> None` checks actual Proxmox state for guests changing to started. CLI produces/reviews a saved plan in a private directory and applies only the inspected artifact. API tokens come from environment; no credential is written to command arguments or logs.
 
-- [ ] Write failing fixture tests for create-start, replacement-start, bootstrap/autostart, fail-open interface flags, missing policy/IP sets, unexpected host/API response, and existing unrelated running guests.
-- [ ] Implement guards and read-only live activation verification with verified HTTPS, request timeouts, and redacted errors. Require separately provisioned firewall state before starting a guest.
-- [ ] Test subprocess boundaries with a fake executable where external Terraform/API calls are unavailable; run the whole Python suite and commit.
+- [x] Write failing fixture tests for create-start, replacement-start, bootstrap/autostart, fail-open interface flags, missing policy/IP sets, unexpected host/API response, and existing unrelated running guests.
+- [x] Implement guards and read-only live activation verification with verified HTTPS, request timeouts, and redacted errors. Require separately provisioned firewall state before starting a guest.
+- [x] Test subprocess boundaries with a fake executable where external Terraform/API calls are unavailable; run the whole Python suite and commit.
 
 ### Task 5: Usable home environment, examples, and verification guide
 
