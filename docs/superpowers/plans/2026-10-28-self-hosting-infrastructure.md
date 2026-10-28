@@ -1,12 +1,12 @@
 # Self-hosting Infrastructure Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Build reusable Terraform modules and a guarded operator workflow for isolated Proxmox VMs and automatic Pi-hole DNS.
 
 **Architecture:** Proxmox Simple SDN owns one `/30` per guest; an aggregate router route provides external reachability. Guest and host firewalls enforce access, explicit DNS uses Pi-hole v6, and small managed host files cover persistent routing and the wildcard.
 
-**Tech Stack:** Terraform >= 1.9, pinned bpg/proxmox and lukaspustina/pihole providers, a validated SSH/file provider, Python 3.9+ standard library for operator tooling and host configuration.
+**Tech Stack:** Terraform >= 1.9, pinned bpg/proxmox and lukaspustina/pihole providers, a validated SSH/file provider, Python 3.11+ standard library for operator tooling and structured local TOML host configuration.
 
 **Spec:** `docs/superpowers/specs/2026-10-28-self-hosting-infrastructure-design.md`
 
@@ -84,7 +84,7 @@
 - [x] Implement the environment, role-aware rules, example bootstrap/stopped then activation inventories, and separate host-state configuration.
 - [x] Document exact init/plan/provision/activate/import/recovery commands and which live checks remain unverified.
 - [x] Run `terraform fmt -check -recursive`, every environment/module validation and Terraform test, `python3 -m unittest discover -s tests -v`, and CLI smoke checks. Commit only source/lock/docs.
-- [ ] Dispatch one independent whole-branch review; fix important findings with failing regression tests, rerun the full suite, and report remaining live-deployment prerequisites.
+- [x] Dispatch one independent whole-branch review; fix important findings with failing regression tests, rerun the full suite, and report remaining live-deployment prerequisites.
 
 
 ## Execution decision

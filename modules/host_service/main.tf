@@ -53,7 +53,7 @@ resource "system_file" "unit" {
   UNIT
 }
 resource "terraform_data" "revision" {
-  input = var.change_tokens
+  triggers_replace = var.change_tokens
   lifecycle {
     replace_triggered_by = [system_file.helper, system_file.config, system_file.unit]
   }

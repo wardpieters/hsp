@@ -44,7 +44,14 @@ resource "proxmox_sdn_subnet" "this" {
   snat    = true
 }
 
+resource "terraform_data" "revision" {
+  lifecycle {
+    replace_triggered_by = [proxmox_sdn_vnet.this, proxmox_sdn_subnet.this]
+  }
+}
+
 output "cidr" { value = local.cidr }
 output "gateway" { value = local.gateway }
 output "address" { value = local.address }
 output "vnet_id" { value = proxmox_sdn_vnet.this.id }
+output "revision" { value = terraform_data.revision.id }

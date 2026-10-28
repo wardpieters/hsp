@@ -1,7 +1,7 @@
 # Self-hosting infrastructure design
 
 Date: 2026-10-28  
-Status: Approved by the user on 2026-10-28; implementation authorized.
+Status: Approved and implemented on 2026-10-28; live deployment and acceptance remain pending.
 
 ## Intent and confirmed constraints
 
@@ -11,7 +11,7 @@ The user requires isolation between guests, restricted access to the home LAN, a
 
 **No VLAN configuration on the EdgeRouter.** Proxmox owns the internal networks and routing. The selected external integration is a static route on the EdgeRouter via Proxmox's existing LAN address, followed by port forwards targeting guest addresses directly. Terraform will produce the necessary route and port-forward inventory; it will not manage the router itself.
 
-The workspace is currently an empty directory, not an initialized Git repository. This document is the only initial artifact; Git initialization and a design commit can happen after design approval.
+At design time the workspace was an empty directory, not an initialized Git repository. After approval, the implementation was committed on the local `feat/self-hosting-infrastructure` branch.
 
 ## Goals, non-goals, and failure conditions
 

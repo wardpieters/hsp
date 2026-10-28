@@ -45,7 +45,7 @@ class HostConfigTests(unittest.TestCase):
 
             def runner(args):
                 if args == ["pihole-FTL", "--config", "misc.dnsmasq_lines"]:
-                    return "[]"
+                    return "[ ]"  # The real FTL CLI is human-readable, not JSON.
                 if len(args) == 4 and args[:3] == ["pihole-FTL", "--config", "misc.dnsmasq_lines"]:
                     (p / "pihole.toml").write_text("changed\n")
                 if args == ["systemctl", "restart", "pihole-FTL.service"]:
@@ -61,18 +61,41 @@ class HostConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "etc/pihole").mkdir(parents=True)
-            (root / "etc/pihole/pihole.toml").write_text("existing\n")
+            (root / "etc/pihole/pihole.toml").write_text(
+                '[misc]\ndnsmasq_lines = ["server=192.168.1.2", "conf-file=/etc/pihole/hsp-dns.conf"]\n')
             changed = []
 
             def runner(args):
                 if len(args) == 3:
-                    return json.dumps(["server=192.168.1.2", "conf-file=/etc/pihole/hsp-dns.conf"])
+                    return "[ server=192.168.1.2, conf-file=/etc/pihole/hsp-dns.conf ]"
                 if args[:3] == ["pihole-FTL", "--config", "misc.dnsmasq_lines"]:
                     changed.extend(json.loads(args[3]))
                 return ""
 
             self.host.configure_pihole({}, root, runner, remove=True)
             self.assertEqual(changed, ["server=192.168.1.2"])
+
+    def test_reads_real_toml_without_cli_array_or_running_api(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            folder = root / "etc/pihole"
+            folder.mkdir(parents=True)
+            (folder / "pihole.toml").write_text('''# Preserve actual TOML strings and embedded commas.
+[misc]
+dnsmasq_lines = [
+  'txt-record=example.test,"hello, world"',
+  "conf-file=/etc/pihole/hsp-dns.conf",
+]
+''')
+            (folder / "hsp-dns.conf").write_text("address=/home.ward.nl/10.77.0.2\n")
+
+            def runner(args):
+                if args == ["pihole-FTL", "--config", "misc.dnsmasq_lines"]:
+                    return '[ txt-record=example.test,"hello, world", conf-file=/etc/pihole/hsp-dns.conf ]'
+                return ""
+
+            # A local structured read still works when the FTL/API is not available.
+            self.host.check({"proxy_address": "10.77.0.2"}, "pihole", root, runner)
 
 
 if __name__ == "__main__":

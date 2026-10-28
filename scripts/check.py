@@ -9,11 +9,17 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def configuration_directories(root=ROOT):
+    return sorted({p.parent for base in ("modules", "environments") for p in (root / base).glob("*/*.tf")})
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["init", "check"])
     args = parser.parse_args()
-    folders = sorted(p.parent for base in ("modules", "environments") for p in (ROOT / base).glob("*/versions.tf"))
+    if sys.version_info < (3, 11):
+        parser.error("Python 3.11+ is required for the host helper's standard TOML parser; select it with make PYTHON=python3.12")
+    folders = configuration_directories()
     if args.action == "check":
         subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tests", "-v"], cwd=ROOT, check=True)
         subprocess.run(["terraform", "fmt", "-check", "-recursive"], cwd=ROOT, check=True)

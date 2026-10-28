@@ -12,10 +12,22 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import tomllib
 
 
 INCLUDE = "conf-file=/etc/pihole/hsp-dns.conf"
 DOMAIN = "home.ward.nl"
+
+
+def read_dnsmasq_lines(root):
+    # FTL's --config output is for humans and removes TOML string quotes.
+    # Reading the local file also supports recovery while the API is down.
+    with (Path(root) / "etc/pihole/pihole.toml").open("rb") as stream:
+        config = tomllib.load(stream)
+    lines = config.get("misc", {}).get("dnsmasq_lines", [])
+    if not isinstance(lines, list) or not all(isinstance(line, str) for line in lines):
+        raise ValueError("Expected a TOML array of dnsmasq string directives")
+    return lines
 
 
 def private_network(value):
@@ -97,7 +109,7 @@ def configure_pihole(config, root=Path("/"), runner=run, remove=False):
         if directives != ["address=/" + DOMAIN + "/" + target]:
             raise ValueError("Managed wildcard file does not match its declared target")
     original = toml.read_bytes()
-    lines = json.loads(runner(["pihole-FTL", "--config", "misc.dnsmasq_lines"]))
+    lines = read_dnsmasq_lines(root)
     desired = reconcile_lines(lines, target, remove)
     legacy = None
     original_legacy = None
@@ -162,7 +174,7 @@ def check(config, kind, root=Path("/"), runner=run):
             raise ValueError("Persistent forwarding/aggregate blackhole is not active")
     else:
         target = str(ipaddress.IPv4Address(config["proxy_address"]))
-        lines = json.loads(runner(["pihole-FTL", "--config", "misc.dnsmasq_lines"]))
+        lines = read_dnsmasq_lines(root)
         if lines.count(INCLUDE) != 1 or any(wildcard_target(line) is not None for line in lines):
             raise ValueError("The managed include is not the sole wildcard owner")
         path = Path(root) / "etc/pihole/hsp-dns.conf"

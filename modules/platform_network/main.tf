@@ -59,7 +59,11 @@ module "guest" {
   vnet_id       = each.value.vnet_id
 }
 resource "terraform_data" "generation" {
-  input = { cidr = var.platform_cidr, zone = var.zone_id, node = var.node_name, networks = var.networks }
+  input = {
+    cidr               = var.platform_cidr, zone = var.zone_id, node = var.node_name, networks = var.networks,
+    resource_revisions = { for name, guest in module.guest : name => guest.revision }
+  }
+  lifecycle { replace_triggered_by = [proxmox_sdn_zone_simple.this] }
 }
 # The provider labels the applier experimental; the SDN and packet filtering
 # facilities themselves are the existing native Proxmox services.

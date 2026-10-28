@@ -22,3 +22,12 @@ run "reject_public_aggregate" {
   variables { platform_cidr = "203.0.113.0/24" }
   expect_failures = [var.platform_cidr]
 }
+run "reject_containing_protected_range" {
+  command = plan
+  variables { protected_cidrs = ["10.0.0.0/8"] }
+  expect_failures = [var.protected_cidrs]
+}
+run "allow_adjacent_network" {
+  command = plan
+  variables { protected_cidrs = ["10.77.1.0/24"] }
+}

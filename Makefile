@@ -1,7 +1,8 @@
 .PHONY: init check fmt
+PYTHON ?= python3
 init:
-	python3 scripts/check.py init
+	$(PYTHON) scripts/check.py init
 check:
-	python3 scripts/check.py check
+	$(PYTHON) scripts/check.py check
 fmt:
 	terraform fmt -recursive

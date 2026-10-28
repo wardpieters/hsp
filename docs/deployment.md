@@ -10,6 +10,8 @@ Back up `/etc/pve/sdn`, `/etc/network/interfaces*`, and the datacenter/node fire
 
 On Pi-hole, record its core/FTL component versions and inspect the source of `*.home.ward.nl`. Preserve its current proxy IP for initial adoption. The implementation handles the usual `misc.dnsmasq_lines` directive or an explicitly selected `/etc/dnsmasq.d/*.conf` file. A different owner/include mechanism needs inspection and an explicit migration decision. It refuses ambiguous or conflicting wildcard targets.
 
+Check `/usr/bin/python3 --version` on both Linux hosts: the helpers require Python 3.11+ for the standard `tomllib` parser. They read the existing Pi-hole TOML locally, so reading configuration does not depend on a running FTL API or interactive API credentials. They do not parse FTL's human-readable array output as JSON. The local validation runner also requires Python 3.11+; use `make PYTHON=python3.12 init check` if `python3` is older.
+
 ## 2. Credentials and trusted connections
 
 Create a dedicated Proxmox API user/token, scoped to the node, intended VM IDs/pool, storage, SDN objects, and firewall operations. Grant only the privileges required by the selected provider operations; SDN apply/host firewall bootstrap may need a separate elevated operator. Consult the pinned provider documentation rather than copy a broad Administrator role. This repository does not create its own credentials.

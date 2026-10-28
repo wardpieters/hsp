@@ -20,6 +20,6 @@ Checks use mocked Terraform providers and temporary filesystem/API fixtures. The
 | `modules/` | Reusable networking, VM, DNS, and bounded host configuration modules |
 | `scripts/hsp.py` | Reviews a private saved plan and separates stopped provisioning from verified activation |
 
-Providers are pinned: `bpg/proxmox` 0.118.1, `lukaspustina/pihole` 0.3.1, and `neuspaces/system` 0.5.0. Terraform >=1.9 and Python >=3.9 are required; local checks were run with Terraform 1.14.8. The BPG SDN applier is explicitly marked experimental by its maintainer; this does not require Proxmox's experimental nftables firewall. Validate SDN apply/removal on disposable guests before migration.
+Providers are pinned: `bpg/proxmox` 0.118.1, `lukaspustina/pihole` 0.3.1, and `neuspaces/system` 0.5.0. Terraform >=1.9 and Python >=3.11 are required; local checks were run with Terraform 1.14.8 and Python 3.12.14. Select a newer local interpreter with `make PYTHON=python3.12 init check` when needed. The Linux host helpers use `/usr/bin/python3`, which must also be 3.11+; Proxmox VE 9 meets that requirement, and the Pi-hole host needs checking. The BPG SDN applier is explicitly marked experimental by its maintainer; this does not require Proxmox's experimental nftables firewall. Validate SDN apply/removal on disposable guests before migration.
 
 Keep state, plans, passwords, and private variable files out of Git. Use the guarded workflow from the guide for deployment. No live infrastructure has been applied by building this repository.
