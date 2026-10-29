@@ -5,15 +5,8 @@ variable "proxy_address" {
     error_message = "The wildcard proxy target must be an IPv4 address."
   }
 }
-variable "legacy_file" {
-  description = "Explicitly inspected /etc/dnsmasq.d/*.conf file containing the existing wildcard, if applicable."
-  type        = string
-  default     = null
-  validation {
-    condition     = var.legacy_file == null ? true : can(regex("^/etc/dnsmasq\\.d/[a-zA-Z0-9_.-]+\\.conf$", var.legacy_file))
-    error_message = "legacy_file must identify one .conf file directly inside /etc/dnsmasq.d."
-  }
-}
+# Register this dedicated file in misc.dnsmasq_lines once before relying on it.
+# That host-local Pi-hole setting cannot be changed through its API.
 resource "system_file" "wildcard" {
   path    = "/etc/pihole/hsp-dns.conf"
   content = "# Managed by hsp Terraform\naddress=/home.ward.nl/${var.proxy_address}\n"
@@ -21,15 +14,17 @@ resource "system_file" "wildcard" {
   uid     = 0
   gid     = 0
 }
-# A resource update due to remote file drift must trigger a reload even if the
+# A resource update due to remote file drift must trigger a restart even if the
 # desired content checksum is identical to the previous successful apply.
 resource "terraform_data" "revision" {
   lifecycle { replace_triggered_by = [system_file.wildcard] }
 }
-module "service" {
-  source        = "../host_service"
-  kind          = "pihole"
-  config_json   = jsonencode({ proxy_address = var.proxy_address, legacy_file = var.legacy_file })
-  change_tokens = [terraform_data.revision.id]
-  depends_on    = [system_file.wildcard]
+resource "system_service_systemd" "ftl" {
+  name       = "pihole-FTL"
+  status     = "started"
+  restart_on = [terraform_data.revision.id]
+}
+output "generation" {
+  description = "Wildcard file revision applied to FTL."
+  value       = terraform_data.revision.id
 }

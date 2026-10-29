@@ -12,10 +12,6 @@ variable "pihole_ssh" {
 }
 variable "platform_cidr" { type = string }
 variable "wildcard_proxy_address" { type = string }
-variable "wildcard_legacy_file" {
-  type    = string
-  default = null
-}
 provider "system" {
   alias = "proxmox"
   ssh {
@@ -45,5 +41,4 @@ module "pihole" {
   source        = "../../modules/pihole_host_dns"
   providers     = { system = system.pihole }
   proxy_address = var.wildcard_proxy_address
-  legacy_file   = var.wildcard_legacy_file
 }

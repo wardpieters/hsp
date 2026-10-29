@@ -42,7 +42,7 @@ variable "bootstrap_admin_cidrs" {
   }
 }
 variable "manage_host_firewall" {
-  description = "Explicit opt-in after reviewing/importing the existing full node ruleset; activation requires the matching live policy regardless."
+  description = "Opt in after reviewing/importing the existing full node ruleset. Otherwise configure equivalent host protection before starting guests."
   type        = bool
   default     = false
 }

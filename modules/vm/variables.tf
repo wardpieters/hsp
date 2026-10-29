@@ -18,7 +18,7 @@ variable "network" {
   }
 }
 variable "started" {
-  description = "Enable only through the verified activation workflow after stopped provisioning."
+  description = "Set true in a second apply after inspecting the stopped VM and verifying firewall enforcement."
   type        = bool
   default     = false
 }

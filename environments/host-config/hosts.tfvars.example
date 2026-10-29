@@ -8,5 +8,5 @@ pihole_ssh = {
 }
 platform_cidr          = "10.77.0.0/24"
 wildcard_proxy_address = "192.168.50.20"
-# Set only after inspecting the actual owner; null handles misc.dnsmasq_lines.
-wildcard_legacy_file = null
+# One-time prerequisite: register /etc/pihole/hsp-dns.conf with Pi-hole.
+# See docs/deployment.md; preserve unrelated dnsmasq settings.

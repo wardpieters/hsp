@@ -1,32 +1,21 @@
-# Deploying the infrastructure
+# Deploying with Terraform
 
-## 1. Inventory the existing systems
+## Prerequisites
 
-Record the real node name and VE patch version, existing bridge configuration, host LAN IP, LAN/management/guest/VPN ranges, available storage, and an unused private platform range. Slots are explicit and permanent; do not renumber them when deleting guests. A `/24` holds 64 `/30` networks.
+Record the real node name, VE patch version/firewall backend, host LAN IP, bridges, protected LAN/VPN ranges, storage, and an unused private platform range. Use the same aggregate in both environments. A `/24` holds 64 `/30` guest networks. Keep explicit slots and VM/VNet IDs stable when adding or deleting guests.
 
-Use a trusted cloud-init QEMU template with one ordinary NIC, a `scsi0` root disk no larger than the requested size, an installed QEMU agent, and no passthrough, extra interfaces, custom cloud-init snippets, or VM hooks. Use SSH keys and a password-locked cloud image. Clone handling depends on the real template, so inspect a stopped disposable clone before activation. Debian/Ubuntu cloud images need to be prepared as a template first; image creation is not automated here.
+Prepare a trusted cloud-init QEMU template with one NIC, a `scsi0` root disk no larger than the requested disk, an installed QEMU agent, SSH key access, and locked password authentication. Inspect a stopped clone for inherited hooks, extra NICs, passthrough, or custom snippets before starting it.
 
-Back up `/etc/pve/sdn`, `/etc/network/interfaces*`, and the datacenter/node firewall configuration through your normal secure backup process. Export existing guest/firewall/DNS inventory. Retain direct Proxmox console access for recovery. Read the existing node ruleset before opting into Terraform ownership: that resource manages the **entire** node rule list.
+Back up Proxmox network/SDN/firewall configuration and Pi-hole configuration. Preserve Proxmox console access during the rollout. Terraform does not automatically adopt existing guests, firewall lists, or DNS records: inspect and import them using the pinned provider's supported IDs before claiming ownership.
 
-On Pi-hole, record its core/FTL component versions and inspect the source of `*.home.ward.nl`. Preserve its current proxy IP for initial adoption. The implementation handles the usual `misc.dnsmasq_lines` directive or an explicitly selected `/etc/dnsmasq.d/*.conf` file. A different owner/include mechanism needs inspection and an explicit migration decision. It refuses ambiguous or conflicting wildcard targets.
+Use trusted HTTPS certificates for both APIs, a dedicated Proxmox API identity, and authorized Pi-hole config-write credentials. Pi-hole application credentials may require `app_sudo`; review the needed permission explicitly. Supply secrets through your secret manager or shell session:
 
-Check `/usr/bin/python3 --version` on both Linux hosts: the helpers require Python 3.11+ for the standard `tomllib` parser. They read the existing Pi-hole TOML locally, so reading configuration does not depend on a running FTL API or interactive API credentials. They do not parse FTL's human-readable array output as JSON. The local validation runner also requires Python 3.11+; use `make PYTHON=python3.12 init check` if `python3` is older.
+- `PROXMOX_VE_API_TOKEN`: the provider's `user@realm!tokenid=secret` credential.
+- `TF_VAR_pihole_password`: the Pi-hole API credential.
 
-## 2. Credentials and trusted connections
+Host configuration uses SSH with independently verified host keys, an SSH agent, and elevated file/service access. No interpreter or custom deployment executable is needed on either host.
 
-Create a dedicated Proxmox API user/token, scoped to the node, intended VM IDs/pool, storage, SDN objects, and firewall operations. Grant only the privileges required by the selected provider operations; SDN apply/host firewall bootstrap may need a separate elevated operator. Consult the pinned provider documentation rather than copy a broad Administrator role. This repository does not create its own credentials.
-
-Use valid HTTPS certificates or a trusted private CA for Proxmox and Pi-hole. Neither provider disables TLS verification. The activation helper uses Python's default trust store; configure that store/`SSL_CERT_FILE` for your CA as well. Verify SSH host keys separately and load the operator's SSH key into an agent. Host configuration requires elevated writes to the named config/unit/helper files; never grant those credentials to application VMs.
-
-Set these in your shell or secret-manager session, without putting their values in shell history or this repository:
-
-- `PROXMOX_VE_API_TOKEN`: `user@realm!tokenid=secret`, consumed by the provider and activation check.
-- `TF_VAR_pihole_password`: an authorized Pi-hole configuration-write credential. Pi-hole v6 application credentials may require broader `app_sudo` privileges; the code does not enable that setting. Review and configure write permission deliberately, then test with a disposable DNS name.
-- `HSP_PROXMOX_SSH`: the verified SSH target such as `terraform@pve.home.ward.nl`, used for read-only routing/firewall preflight during activation. Ensure OpenSSH's known-host entry is verified too.
-
-Use local state on an encrypted, backed-up workstation initially. Run `umask 077` before Terraform. Both environments have independent state; never copy one environment's state onto the other. Sensitive markings redact output but do not encrypt state. Do not run two Terraform writers against the same Pi-hole; the workflow uses `-parallelism=1` within a run.
-
-## 3. Prepare private configuration and initialize
+## Configure and initialize
 
 ```sh
 umask 077
@@ -36,84 +25,69 @@ make init
 make check
 ```
 
-Replace **all** example addresses, IDs, storage, template, SSH public key, NTP targets, SSH host keys, and protected ranges. The examples are illustrative and are not auto-loaded. Use the same platform aggregate in both environments. Include real VPN/remote networks in the overlap inventory. The protected network list must include the Proxmox LAN address.
+Replace every illustrative address, ID, SSH key, template, datastore, NTP target, and host key. Both environments use separate state. Keep state and plans on an encrypted, backed-up workstation. Sensitive Terraform values still appear in state and saved plans. Run only one writer against Pi-hole and use `-parallelism=1` for the home environment.
 
-Initially leave every guest `started = false` and `on_boot = false`. Set `manage_host_firewall = true` only after reviewing and, where required, importing the existing datacenter/node settings and full node rule list. Preserve your current runner address in `bootstrap_admin_cidrs`. If management is maintained outside Terraform, activation still requires its live rules to exactly match the generated host policy.
+Leave new guests `started = false` and `on_boot = false`. Set `manage_host_firewall = true` only after reviewing/importing the existing full node rule list and datacenter/node settings: Terraform will own those resources. Otherwise establish equivalent host protection separately. The generated policy is visible through `terraform output host_policy`. Preserve the bootstrap administrator `/32` until admin VPN access works.
 
-## 4. Apply the bounded host configuration
-
-Review this separate plan before accepting its changes:
+## Apply host routing and create the wildcard file
 
 ```sh
-python3 scripts/hsp.py plan --directory environments/host-config --var-file environments/host-config/hosts.tfvars
-python3 scripts/hsp.py apply --directory environments/host-config --var-file environments/host-config/hosts.tfvars
+terraform -chdir=environments/host-config plan -var-file=hosts.tfvars -out=hosts.tfplan
+terraform -chdir=environments/host-config apply hosts.tfplan
 ```
 
-The Proxmox side installs an idempotent service that enables IPv4 forwarding and a metric-42760 blackhole route for the aggregate. Connected `/30` routes win over that aggregate. A `pve-guests.service` drop-in requires the host configuration and established `pve-firewall` service before guest autostart. It does not add host DNAT, change the physical bridge, or enable nftables. Inspect existing startup dependencies before applying this drop-in.
+Native Terraform file/service resources install a systemd unit on Proxmox. It enables IPv4 forwarding and maintains a metric-42760 blackhole route for the aggregate. Connected guest `/30` routes win over that aggregate, while unused addresses terminate locally. A `pve-guests.service` drop-in requires routing and `pve-firewall.service` before autostart. The unit uses the host's standard `sysctl` and `ip` commands; there are no custom host scripts.
 
-The Pi-hole side manages `/etc/pihole/hsp-dns.conf`, registers only that file, preserves unrelated dnsmasq settings, validates the combined configuration, then restarts Pi-hole FTL. This causes a brief DNS service interruption. It keeps a local backup of `pihole.toml` and a last-good managed file, and restores them if validation/reload fails. It does not send the full Pi-hole config or backup to Terraform state.
+Terraform also creates `/etc/pihole/hsp-dns.conf` with the wildcard target supplied in `hosts.tfvars`. Preserve the existing proxy address for the initial adoption.
 
-If the wildcard lives in `/etc/dnsmasq.d`, set `wildcard_legacy_file` to the inspected file. The helper removes only its matching wildcard directive after backing up the source content. It refuses shared multi-domain directives and unrelated/conflicting owners. Inspect retained `conf-file=`/`conf-dir=` includes too; the helper does not claim to discover every custom include graph automatically.
+## Adopt the existing Pi-hole wildcard once
 
-Provider read-back detects drift in the managed file. Generation resources trigger a validated service reload even if a drift repair restores the same desired checksum. Host helpers are Linux/systemd programs; their privileged lifecycle has been tested with temporary fixtures and schema validation, not on your actual Pi-hole instance.
+Pi-hole's `misc.dnsmasq_lines` cannot be changed through its API. Register the dedicated file locally once, after Terraform has created it. Subsequent wildcard target changes use the file resource, and declared guest DNS names use API resources. See the [Pi-hole configuration reference](https://docs.pi-hole.net/ftldns/configfile/#dnsmasq_lines).
 
-## 5. Provision stopped guests and inspect policy
+1. Inspect `/etc/pihole/pihole.toml`, `/etc/dnsmasq.d`, and any custom includes to locate the existing `home.ward.nl` wildcard. Back up its actual source and `pihole.toml` locally on the host.
+2. In the existing `[misc]` section of `pihole.toml`, add `"conf-file=/etc/pihole/hsp-dns.conf"` to the `dnsmasq_lines` array. Preserve all unrelated array entries. Replace the old matching wildcard directive in that array, or remove just that directive from its original included file. Retain exactly one wildcard owner.
+3. Run `sudo pihole-FTL dnsmasq-test`. If it succeeds, run `sudo systemctl restart pihole-FTL` and query a wildcard name. Restore the backed-up configuration if validation fails.
 
-Start with a disposable VM and a new, unused DNS label. Do not claim an existing label until it is inspected/imported.
+The module manages the dedicated file and restarts FTL on later file changes or repairs. It does not edit the rest of `pihole.toml`, migrate legacy directives, or provide automatic rollback. A restart briefly interrupts DNS.
+
+## Provision stopped guests
+
+Start with a disposable VM and an unused DNS name:
 
 ```sh
-python3 scripts/hsp.py plan --var-file environments/home/home.tfvars
-python3 scripts/hsp.py apply --var-file environments/home/home.tfvars
+terraform -chdir=environments/home plan -var-file=home.tfvars -parallelism=1 -out=home.tfplan
+terraform -chdir=environments/home apply -parallelism=1 home.tfplan
 terraform -chdir=environments/home output router_route
 terraform -chdir=environments/home output public_forwards
 ```
 
-The wrapper prints Terraform's human-readable plan, inspects the JSON privately, and asks you to type `apply` before applying that exact saved artifact. `--yes` explicitly skips that prompt for an authorized automation. Temporary plan files are kept under a mode-700 directory and removed afterwards. New or replacement VMs requesting `started` or `on_boot` are rejected. Direct `terraform apply` bypasses this guard; it is not the deployment workflow.
+Review the saved plan before applying it. Inspect the stopped clone's NIC, SDN bridge, assigned address, and inherited settings. Confirm firewall enablement at datacenter/node/guest/NIC levels, DROP policies, `ipfilter-net0`, MAC filtering, and effective rule order. The established firewall backend is used; VNet/FORWARD rules from the experimental nftables backend are not required.
 
-Check the stopped clone has only the intended NIC and no inherited hooks/passthrough/snippets. Check datacenter, node, VM and NIC firewall enable flags, `ipfilter-net0`, input/output DROP policies, and the generated rules. Host rules are staged before Terraform enables the datacenter/node firewall. Keep the temporary bootstrap source and console access until the admin VPN works.
+On the EdgeRouter, add the aggregate route from `router_route` via Proxmox's existing LAN IP. Add selected port forwards from `public_forwards` to guest IPs and ports. Check the existing WAN firewall/NAT permits replies. No VLAN configuration is needed. Do not forward Proxmox management or guest SSH.
 
-On the EdgeRouter, add the single route shown by `router_route`: destination is the platform aggregate and next hop is Proxmox's **existing LAN IP**. No VLAN configuration is needed. Add only selected public port forwards to the guest IP/port shown by `public_forwards`. Verify the existing WAN firewall/NAT policy supports those flows. Do not port-forward Proxmox management or guest SSH.
+The route makes guests reachable at Layer 3 from the LAN. Host and guest firewalls enforce access restrictions. Protected/private sources are blocked before broad public-service allows, so LAN hairpin connections may be denied; use the intended VPN access.
 
-The static route also makes guests routable from the LAN; guest and host rules must enforce the intended restrictions. Public ingress rules block protected/private sources before the broad public allow. LAN hairpin connections may therefore be denied intentionally; use the appropriate VPN access.
+## Start inspected guests
 
-## 6. Activate separately
+Set only the inspected guests to `started = true`, then repeat the normal plan/apply commands. Keep first provisioning and first start in separate applies: VM creation and its sibling firewall resources are not an atomic transaction. There is no additional automated activation guard. Set `on_boot = true` only after reboot-persistence checks pass.
 
-After the stopped-provision apply is converged, change only selected existing guests to `started = true`. Optionally set `on_boot = true` after reboot-persistence testing. Do not add new guests or change policy in the activation plan.
+Install VPN/proxy software through your normal configuration process. The admin VPN has explicit management/guest SSH access; the family VPN has HTTPS to the private proxy plus approved DNS/NTP/update access. VPN gateways must authenticate peers, prevent spoofing, and SNAT clients to their respective gateway IPs in this model. Configure reverse proxy routes and TLS separately. DNS records alone do not configure a proxy.
 
-```sh
-python3 scripts/hsp.py activate --var-file environments/home/home.tfvars
-```
+## Live acceptance and removal
 
-Activation requires the enabled established firewall backend, verified host aggregate routing/forwarding, and exact live host/VM policy. It checks actual NIC count/bridge, cloud-init IPv4 address, source IP filtering, and rule order. API/SSH failure blocks activation. It rejects policy/network changes in the same apply, so first provision those changes with guests stopped, then activate. Existing unrelated running guests do not block adding a new stopped guest.
+Before migrating real services, verify:
 
-This verifies configuration, not actual packet reachability. It cannot prove that a guest or another administrator will never change state between check and apply. Console recovery and live packet tests remain necessary.
+- Unrelated guests cannot reach each other, host management, gateway management addresses, or LAN services. Test IPv6/link-local traffic and IP/MAC spoofing too.
+- Explicit dependencies work only on their declared ports; approved DNS, NTP, and optional update traffic work.
+- LAN clients cannot bypass restrictions through a public-service allow. Verify effective host rules, including Proxmox's implicit management allowances.
+- An external EdgeRouter-forwarded connection receives replies. Check observed source addresses and SDN SNAT behavior.
+- Unallocated aggregate addresses terminate locally. Host reboot restores routing and filtering before workload autostart.
+- Direct/proxy DNS aliases override the wildcard correctly; updates and deletion preserve unrelated records.
+- Removing a disposable guest cleans up its DNS, firewall, subnet, and VNet, leaves no staged SDN changes, and produces a subsequent empty plan.
+- Once VPNs/proxies are configured, admin and family clients have their intended distinct access.
 
-Configure the VPN/proxy software through the Proxmox console or your established configuration process. The admin VPN gateway has explicit host management/guest SSH access. The family VPN gateway has only approved DNS/NTP/update access and HTTPS to the private proxy. VPN software must authenticate peers, prevent peer spoofing, and SNAT clients to the correct gateway address for this initial routing model. Separate public/private proxies prevent a shared HTTPS listener from accidentally exposing private hostnames. Configure proxy backends and TLS separately; DNS does not create routes in the proxy.
+Remove guests through a reviewed Terraform plan. Do not reuse IDs/slots until cleanup is verified. Keep the routing foundation while guests or router routes depend on it.
 
-## 7. Import, change, and remove resources
+Before removing the wildcard module, remove its `conf-file=` include locally or replace it with your intended DNS configuration, validate, and restart FTL. Deleting the file while leaving a required include would break DNS. Stop/remove guests and router forwards/routes before dismantling host routing. The routing service removes its own aggregate route when stopped; IPv4 forwarding is left enabled because other services may depend on it.
 
-Terraform owns only declared guest DNS records. The existing wildcard continues to resolve unknown names to the original proxy until you explicitly change its target. Explicit direct/proxy records must override that wildcard in live tests. Updating a DNS alias must remove its obsolete address; test this with the pinned Pi-hole provider before adopting production records. Other tools must not concurrently rewrite the same Pi-hole config arrays.
-
-Use `terraform import` only after mapping an existing resource to its exact address and checking the pinned provider's supported import ID. For example, the wildcard file can be imported at `module.pihole.system_file.wildcard` in the host-config environment; avoid `:content` imports of full configuration files. Do not assume every existing guest/template is compatible with the new VM module. Never remove unrelated records to make an import succeed.
-
-For deletion, inspect the normal guarded plan. Removing a declared guest removes its owned DNS, firewall resources, subnet and VNet. Never reuse an occupied slot or VM ID before cleanup is verified. BPG labels the SDN applier experimental: verify both additions and deletions on the actual pinned provider, and check for pending SDN changes after removal.
-
-Destroying host configuration stops its helper service first, unregistering the wildcard include or deleting only its own blackhole route. It does not restore the original wildcard as an unmanaged directive or disable IPv4 forwarding that other systems may need. Do not destroy the routing foundation while guests or router routes still depend on it. For full teardown, stop/remove guests, remove router forwards/route, then remove host configuration after reviewing DNS consequences. No blanket destroy command is provided.
-
-## 8. Live acceptance and recovery
-
-Before migrating a real service, verify:
-
-- Guest-to-guest, guest-to-host (including each gateway address), and guest-to-LAN connections fail unless explicitly allowed. Repeat IPv6/link-local checks and IP/MAC spoof attempts.
-- A declared proxy/backend dependency works only on its selected port. Approved DNS TCP/UDP 53, NTP, and optional updates work; Pi-hole's admin UI stays inaccessible from ordinary guests.
-- LAN clients cannot use a guest's public allow rule to bypass the protected-source block. Verify host rules override any Proxmox implicit management allowance on your exact version.
-- An actual external connection through EdgeRouter DNAT receives replies. Record the source address seen by the guest and check SDN SNAT has not changed internal identity assumptions.
-- Unallocated aggregate addresses terminate at Proxmox rather than loop back to the router.
-- Direct/proxy DNS aliases, exact-name overrides, updates and deletion behave correctly and preserve unrelated entries.
-- Removing a disposable VM leaves no pending SDN configuration; the next plan is empty.
-- A host reboot restores routing and firewall enforcement before workload autostart. Only then enable `on_boot` for real workloads.
-- Once the services are installed, admin VPN users can administer intended resources, family users reach only the approved private applications, and family users cannot use the private proxy to reach admin/public-only hostnames.
-
-If networking/firewall changes interrupt management, use the Proxmox console to restore the exported configuration, then reconcile Terraform state rather than blindly reapplying. For Pi-hole, retain the root-readable backup and last-good file; inspect the reported helper failure, restore the previous configuration if necessary, run its supported dnsmasq check, and restart FTL. A failed apply must be investigated before retrying.
-
-The shared physical uplink remains on your LAN. These policies do not create physical protection from hostile Layer 2 LAN traffic. Keep host management protected and patched; separate physical networks can be a later project if that threat becomes relevant.
+Use the Proxmox console and your configuration backups for recovery, then reconcile Terraform state. For Pi-hole, restore the previous local configuration, validate it, and restart FTL before retrying. The shared physical LAN uplink still needs a protected, patched Proxmox host.

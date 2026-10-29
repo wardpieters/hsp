@@ -14,8 +14,6 @@ override.tf.json
 *_override.tf.json
 .env
 .env.*
-__pycache__/
-*.pyc
 .superpowers/
 .worktrees/
 .DS_Store

@@ -1,7 +1,7 @@
 # Self-hosting infrastructure design
 
 Date: 2026-10-28  
-Status: Approved and implemented on 2026-10-28; live deployment and acceptance remain pending.
+Status: Approved and implemented on 2026-10-28; simplified to Terraform resources and commands at the user's request on 2026-10-29. Live deployment and acceptance remain pending.
 
 ## Intent and confirmed constraints
 
@@ -125,7 +125,7 @@ Pin tested versions of `bpg/proxmox`, a Pi-hole v6 provider, and a remote-file p
 
 Use native provider resources for guest, SDN, firewall, and DNS lifecycle. If persistent forwarding/aggregate routing needs host access, isolate it into a small, idempotent bootstrap procedure with a clear read-back check. Do not scatter SSH provisioners through guest modules or add unmanaged host DNAT.
 
-New guests are provisioned stopped, with autostart disabled. Configure and read back their NIC/guest firewall flags, address filters, and policy before activation. Expose activation as a separate workflow step; reject an initial request to create a new guest already running. Existing running guests are unaffected by provisioning another guest. The builder must implement this guard in the operator workflow and test it, rather than relying on Terraform's sibling-resource ordering.
+New guests default to stopped, with autostart disabled. Inspect their NIC/guest firewall flags, address filters, and effective policy before setting `started = true` in a second Terraform apply. Following the user's Terraform-only correction, this is a documented operator step rather than a custom automated activation guard. Terraform's sibling-resource ordering does not guarantee that a newly created running guest would be protected immediately.
 
 Initial guest support is QEMU VMs, including VMs that can later host application containers. Native LXC and application-container deployment are explicitly deferred; they need their own isolation and lifecycle decisions. Do not imply that a VM firewall separately isolates Docker containers sharing a VM.
 
@@ -141,9 +141,9 @@ The existing wildcard resolving `*.home.ward.nl` to the reverse proxy remains op
 
 The user confirmed a direct host installation. Read the current configuration during deployment inventory to locate the wildcard's actual owner; this is an inspection task, not a request for the user to find the file manually. Preserve its existing target until the proxy migration is explicitly configured.
 
-Proposed host configuration: Terraform manages a dedicated file such as `/etc/pihole/hsp-dns.conf`, containing only the platform's wildcard directive. A bounded, idempotent host bootstrap registers that specific file through a `conf-file=` entry in `misc.dnsmasq_lines`, preserving all other entries. Do not replace all of `pihole.toml`, enable directory-wide includes without inspecting their contents, or import the full potentially sensitive config into Terraform state.
+Host configuration: Terraform manages `/etc/pihole/hsp-dns.conf`, containing only the platform's wildcard directive, and the existing FTL service's restart trigger. Register that file once through a local `conf-file=` entry in `misc.dnsmasq_lines`, preserving unrelated entries. This setting cannot be changed through the API. Do not replace all of `pihole.toml`, enable directory-wide includes without inspecting their contents, or import the full potentially sensitive config into Terraform state.
 
-Migration backs up the source configuration on the Pi-hole host, creates and validates the managed file, replaces the old wildcard directive with the include at its actual source, and reloads using the installed Pi-hole version's supported procedure. Validate the effective combined configuration before activation, roll back on failure, and ensure exactly one wildcard owner. File drift must be visible in Terraform; a changed file must trigger a validated reload, not merely a running-service check. Destruction must not leave a dangling required include or take unrelated DNS settings with it.
+The one-time adoption procedure backs up the source configuration, replaces its matching wildcard directive with the include, validates the combined configuration, and restarts FTL. Ensure exactly one wildcard owner. File drift is visible in Terraform and repairs trigger a restart. Following the scope correction, migration, validation/recovery, and removal of the include before teardown are operator steps; there is no custom migration or rollback program.
 
 Subsequent wildcard target changes are managed through the dedicated file resource. Exact per-guest names remain API resources and must take precedence, verified by real DNS queries. Inspect whether any environment configuration makes those settings read-only before using API resources. If the actual wildcard is owned by a different configuration system, bring that concrete ownership conflict back to the user before replacing it. Do not claim full DNS conversion after managing explicit records alone.
 
@@ -161,7 +161,7 @@ Pi-hole's API and the initial Terraform runner must be reachable independently o
 
 ## Verification and rollout
 
-Offline checks cover Terraform formatting/validation and meaningful tests for stable slot allocation, duplicate names/addresses/IDs, subnet bounds, DNS target selection, protected-range rule order, and activation guards. Do not test merely that expressions mirror themselves.
+Offline checks cover Terraform formatting/validation and meaningful tests for stable slot allocation, duplicate names/addresses/IDs, subnet bounds, DNS target selection, protected-range rule order, stopped defaults, and native service triggers. Do not test merely that expressions mirror themselves.
 
 Then use disposable guests and a disposable DNS name to verify:
 

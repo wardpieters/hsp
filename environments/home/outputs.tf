@@ -11,9 +11,7 @@ output "public_forwards" {
     guest = name, address = module.network.networks[name].address, protocol = p.protocol, port = p.port
   }]])
 }
-output "activation_context" {
-  value = { endpoint = var.proxmox_endpoint, platform_cidr = var.platform_cidr, host_rules = local.host_rules }
-}
+output "host_policy" { value = local.host_rules }
 output "policies" { value = { for name, service in module.service : name => service.rules } }
 output "dns_targets" {
   value = { for d in local.dns_entries : d.name => d.mode == "proxy" ? d.proxy_address : module.network.networks[d.guest].address if d.mode != "none" }

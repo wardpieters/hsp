@@ -1,25 +1,32 @@
 # Home self-hosting platform
 
-Terraform infrastructure for one Proxmox VE 9.x node and Pi-hole v6. Proxmox owns all internal networks and routing. Each VM receives its own Simple SDN VNet and `/30`, a static address, source IP/MAC filtering, and default-deny firewall policy. The EdgeRouter needs one static route and selected direct-to-guest port forwards; no router VLANs are involved.
+Terraform configuration for one Proxmox VE 9.x node and Pi-hole v6. Each VM gets a Simple SDN VNet, its own `/30`, a static IP, source IP/MAC filtering, and default-deny firewall rules. The EdgeRouter needs one aggregate static route and selected port forwards to guest IPs. No router VLANs are needed.
 
-The implementation provisions VM infrastructure and DNS. It does **not** install VPN/reverse proxy/application software or migrate existing guests. Containers can later run inside the managed VMs; native LXC support is deferred.
+Declare a guest once in [the home inventory](environments/home/home.tfvars.example). Its DNS aliases can resolve directly to the guest or to a selected reverse proxy. Separate admin and family VPN roles generate different access rules.
 
-Start with the [deployment guide](docs/deployment.md). The [home inventory example](environments/home/home.tfvars.example) shows public/private proxies, separate admin/family VPN gateways, application dependencies, and direct/proxy DNS aliases. The [host configuration example](environments/host-config/hosts.tfvars.example) covers persistent routing and existing wildcard adoption.
+| Configuration | Resources |
+| --- | --- |
+| `environments/home` | SDN, VMs, firewalls, and per-guest Pi-hole DNS records |
+| `environments/host-config` | Persistent host routing and the Pi-hole wildcard file, using Terraform's SSH file/service provider |
+| `modules/` | Reusable network, VM, DNS, and host configuration modules |
+
+Deploy using ordinary Terraform commands, after filling in the private variables and completing the prerequisites in the [deployment guide](docs/deployment.md):
+
+```sh
+terraform -chdir=environments/home init
+terraform -chdir=environments/home plan -var-file=home.tfvars -parallelism=1 -out=home.tfplan
+terraform -chdir=environments/home apply -parallelism=1 home.tfplan
+```
+
+Guests default to stopped. Inspect their networking and firewall enforcement, then set `started = true` in a second apply. Pi-hole's existing wildcard needs a one-time host-local include registration; subsequent target changes and per-guest DNS records are managed by Terraform.
+
+Local validation and mock-provider tests require only Terraform and Make:
 
 ```sh
 make init
 make check
 ```
 
-Checks use mocked Terraform providers and temporary filesystem/API fixtures. They do not connect to your infrastructure. Live filtering, DNS behavior, reboot persistence, and inbound port forwards still need the acceptance checks in the guide.
+Providers are pinned to `bpg/proxmox` 0.118.1, `lukaspustina/pihole` 0.3.1, and `neuspaces/system` 0.5.0. Terraform >=1.9 is required; checks use Terraform 1.14.8. The BPG SDN applier is marked experimental by its maintainer, so verify its lifecycle on disposable guests before migration.
 
-| Component | Purpose |
-| --- | --- |
-| `environments/home` | Normal guest inventory, SDN, guest policies, DNS records, optional host firewall ownership |
-| `environments/host-config` | Separate state for persistent host routing and Pi-hole wildcard configuration |
-| `modules/` | Reusable networking, VM, DNS, and bounded host configuration modules |
-| `scripts/hsp.py` | Reviews a private saved plan and separates stopped provisioning from verified activation |
-
-Providers are pinned: `bpg/proxmox` 0.118.1, `lukaspustina/pihole` 0.3.1, and `neuspaces/system` 0.5.0. Terraform >=1.9 and Python >=3.11 are required; local checks were run with Terraform 1.14.8 and Python 3.12.14. Select a newer local interpreter with `make PYTHON=python3.12 init check` when needed. The Linux host helpers use `/usr/bin/python3`, which must also be 3.11+; Proxmox VE 9 meets that requirement, and the Pi-hole host needs checking. The BPG SDN applier is explicitly marked experimental by its maintainer; this does not require Proxmox's experimental nftables firewall. Validate SDN apply/removal on disposable guests before migration.
-
-Keep state, plans, passwords, and private variable files out of Git. Use the guarded workflow from the guide for deployment. No live infrastructure has been applied by building this repository.
+This provisions infrastructure. VPN, reverse proxy, application software, existing guest migration, and native LXC are separate work. Containers can run inside the managed VMs. No live infrastructure has been changed. Keep state, plans, passwords, and private variables out of Git.
