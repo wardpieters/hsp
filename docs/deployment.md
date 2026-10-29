@@ -13,7 +13,7 @@ Use trusted HTTPS certificates for both APIs, a dedicated Proxmox API identity, 
 - `PROXMOX_VE_API_TOKEN`: the provider's `user@realm!tokenid=secret` credential.
 - `TF_VAR_pihole_password`: the Pi-hole API credential.
 
-Proxmox host routing uses SSH agent authentication and elevated file/service access. SSH host-key verification is disabled. Pi-hole DNS uses only its API; no Pi-hole SSH credentials or host files are required.
+Proxmox host routing uses SSH agent authentication and elevated file/service access. Root logins run commands directly; other users require installed, passwordless `sudo`. SSH host-key verification is disabled. Pi-hole DNS uses only its API; no Pi-hole SSH credentials or host files are required.
 
 ## Configure and initialize
 

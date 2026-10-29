@@ -15,7 +15,7 @@ provider "system" {
     user  = var.proxmox_ssh.user
     agent = true
   }
-  sudo = true
+  sudo = var.proxmox_ssh.user != "root"
 }
 module "proxmox" {
   source        = "../../modules/proxmox_host"
