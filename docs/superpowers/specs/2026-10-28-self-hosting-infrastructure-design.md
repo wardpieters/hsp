@@ -1,7 +1,7 @@
 # Self-hosting infrastructure design
 
 Date: 2026-10-28  
-Status: Approved and implemented on 2026-10-28; simplified to Terraform resources and commands at the user's request on 2026-10-29. Live deployment and acceptance remain pending.
+Status: Approved and implemented on 2026-10-28; simplified to Terraform resources/commands and explicit API-managed DNS at the user's request on 2026-10-29. A wildcard is no longer required. Live deployment and acceptance remain pending.
 
 ## Intent and confirmed constraints
 
@@ -116,7 +116,7 @@ Proposed modules:
 - `guest_network`: a stable VNet and `/30` subnet for a fixed slot.
 - `vm`: a VM from an explicitly selected cloud-init-compatible template, static network configuration, SSH public keys, guest firewall options, anti-spoofing set, and ordered rules.
 - `dns_records`: explicit Pi-hole records, with `direct`, `proxy`, or `none` routing per name and an explicit proxy target when applicable.
-- `pihole_host_dns`: the existing wildcard in a dedicated managed dnsmasq configuration file on the Pi-hole host, separate from per-guest API records.
+- `proxmox_host`: persistent IPv4 forwarding, aggregate termination, and guest startup ordering through native Terraform file/service resources.
 - `service_vm`: composition of guest network, VM, and optional DNS, exposing one declaration to an operator. Lower-level modules remain reusable.
 
 Use stable map keys and explicit identifiers. Keep address allocation authoritative in Terraform; do not introduce a second dynamic allocator or DHCP for these static guests. SDN IPAM metadata and cloud-init must not disagree; the builder may omit optional IPAM registrations where native provider support is insufficient.
@@ -129,7 +129,7 @@ New guests default to stopped, with autostart disabled. Inspect their NIC/guest 
 
 Initial guest support is QEMU VMs, including VMs that can later host application containers. Native LXC and application-container deployment are explicitly deferred; they need their own isolation and lifecycle decisions. Do not imply that a VM firewall separately isolates Docker containers sharing a VM.
 
-## DNS management and existing wildcard
+## DNS management
 
 Use Pi-hole v6's API for explicit A records. A name configured as `direct` resolves to its guest address; a name configured as `proxy` resolves to the selected proxy address. Multiple aliases may use different modes. Names are restricted to `home.ward.nl`, are unique across the inventory, and cannot simultaneously be A and CNAME records.
 
@@ -137,15 +137,9 @@ Prefer explicit A records initially; CNAME support is optional, not a requiremen
 
 Read/import existing matching records before claiming them. Create, update, and delete only Terraform-owned entries. Updates must not leave stale address records; concurrent changes to the provider's shared Pi-hole configuration arrays must be serialized and tested. Preserve unrelated entries and verify a second plan has no drift.
 
-The existing wildcard resolving `*.home.ward.nl` to the reverse proxy remains operational during migration. The common implementation is a dnsmasq `address=` directive, but the actual current configuration has not been inspected. Current Pi-hole documentation says `misc.dnsmasq_lines` cannot be set through its API. Do not model the wildcard as a normal wildcard A record or promise API-only automation.
+The user clarified on 2026-10-29 that a wildcard is not required. Manage every desired name through `dns_records` and the provider's `pihole_dns_record` API resource. No Pi-hole host file, systemd service resource, or SSH configuration is part of this design.
 
-The user confirmed a direct host installation. Read the current configuration during deployment inventory to locate the wildcard's actual owner; this is an inspection task, not a request for the user to find the file manually. Preserve its existing target until the proxy migration is explicitly configured.
-
-Host configuration: Terraform manages `/etc/pihole/hsp-dns.conf`, containing only the platform's wildcard directive, and the existing FTL service's restart trigger. Register that file once through a local `conf-file=` entry in `misc.dnsmasq_lines`, preserving unrelated entries. This setting cannot be changed through the API. Do not replace all of `pihole.toml`, enable directory-wide includes without inspecting their contents, or import the full potentially sensitive config into Terraform state.
-
-The one-time adoption procedure backs up the source configuration, replaces its matching wildcard directive with the include, validates the combined configuration, and restarts FTL. Ensure exactly one wildcard owner. File drift is visible in Terraform and repairs trigger a restart. Following the scope correction, migration, validation/recovery, and removal of the include before teardown are operator steps; there is no custom migration or rollback program.
-
-Subsequent wildcard target changes are managed through the dedicated file resource. Exact per-guest names remain API resources and must take precedence, verified by real DNS queries. Inspect whether any environment configuration makes those settings read-only before using API resources. If the actual wildcard is owned by a different configuration system, bring that concrete ownership conflict back to the user before replacing it. Do not claim full DNS conversion after managing explicit records alone.
+The existing unmanaged wildcard can remain during migration. Inventory names currently relying on it, declare/import and verify their explicit records, then remove the old directive at its current source after backing up the configuration. Terraform does not change that existing directive. Inspect whether Pi-hole configuration is read-only before using API resources and verify real DNS behavior on the installed version.
 
 Restrict the Pi-hole API to the Terraform runner. Verify the privileges needed for config writes: Pi-hole application credentials are not automatically restricted to DNS-only changes. Do not silently enable broader application API privileges.
 
@@ -171,7 +165,7 @@ Then use disposable guests and a disposable DNS name to verify:
 4. LAN-originated access remains blocked even when public service ports are allowed.
 5. An actual external connection through EdgeRouter DNAT reaches the guest and receives replies; record the source seen by the guest.
 6. Unallocated aggregate destinations terminate locally rather than loop through the router.
-7. Both direct/proxy names resolve as declared; exact records override the retained wildcard; updates/deletion preserve unrelated DNS entries.
+7. Both direct/proxy names resolve as declared; updates/deletion preserve unrelated DNS entries, including during migration from the existing wildcard.
 8. Removing a disposable guest cleans up its DNS, firewall, VNet, and subnet without affecting other guests; a second plan is empty.
 9. Host reboot restores routing, SNAT, and filtering before managed workloads autostart.
 10. Once VPN/proxy software is configured, an admin client reaches the intended management services, while a family client reaches only approved private applications and cannot reach public-only/admin applications through the private proxy.

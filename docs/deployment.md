@@ -13,7 +13,7 @@ Use trusted HTTPS certificates for both APIs, a dedicated Proxmox API identity, 
 - `PROXMOX_VE_API_TOKEN`: the provider's `user@realm!tokenid=secret` credential.
 - `TF_VAR_pihole_password`: the Pi-hole API credential.
 
-Host configuration uses SSH with independently verified host keys, an SSH agent, and elevated file/service access. No interpreter or custom deployment executable is needed on either host.
+Proxmox host routing uses SSH with independently verified host keys, an SSH agent, and elevated file/service access. Pi-hole DNS uses only its API; no Pi-hole SSH credentials or host files are required.
 
 ## Configure and initialize
 
@@ -29,7 +29,7 @@ Replace every illustrative address, ID, SSH key, template, datastore, NTP target
 
 Leave new guests `started = false` and `on_boot = false`. Set `manage_host_firewall = true` only after reviewing/importing the existing full node rule list and datacenter/node settings: Terraform will own those resources. Otherwise establish equivalent host protection separately. The generated policy is visible through `terraform output host_policy`. Preserve the bootstrap administrator `/32` until admin VPN access works.
 
-## Apply host routing and create the wildcard file
+## Apply Proxmox host routing
 
 ```sh
 terraform -chdir=environments/host-config plan -var-file=hosts.tfvars -out=hosts.tfplan
@@ -38,17 +38,13 @@ terraform -chdir=environments/host-config apply hosts.tfplan
 
 Native Terraform file/service resources install a systemd unit on Proxmox. It enables IPv4 forwarding and maintains a metric-42760 blackhole route for the aggregate. Connected guest `/30` routes win over that aggregate, while unused addresses terminate locally. A `pve-guests.service` drop-in requires routing and `pve-firewall.service` before autostart. The unit uses the host's standard `sysctl` and `ip` commands; there are no custom host scripts.
 
-Terraform also creates `/etc/pihole/hsp-dns.conf` with the wildcard target supplied in `hosts.tfvars`. Preserve the existing proxy address for the initial adoption.
+## Declare local DNS records
 
-## Adopt the existing Pi-hole wildcard once
+Each guest's `dns` map is passed to `modules/dns_records`, which manages `pihole_dns_record` resources through Pi-hole's local DNS API. `direct` resolves to the guest IP; `proxy` resolves to a declared proxy guest (`proxy_name`) or an external proxy IP (`proxy_address`); `none` creates no record. The inventory example shows both direct and proxy aliases. Removing an alias removes its Terraform-owned record.
 
-Pi-hole's `misc.dnsmasq_lines` cannot be changed through its API. Register the dedicated file locally once, after Terraform has created it. Subsequent wildcard target changes use the file resource, and declared guest DNS names use API resources. See the [Pi-hole configuration reference](https://docs.pi-hole.net/ftldns/configfile/#dnsmasq_lines).
+The configuration no longer manages a wildcard or any Pi-hole host file. Remove the obsolete `pihole_ssh` and `wildcard_proxy_address` entries if you copied an older `hosts.tfvars` example.
 
-1. Inspect `/etc/pihole/pihole.toml`, `/etc/dnsmasq.d`, and any custom includes to locate the existing `home.ward.nl` wildcard. Back up its actual source and `pihole.toml` locally on the host.
-2. In the existing `[misc]` section of `pihole.toml`, add `"conf-file=/etc/pihole/hsp-dns.conf"` to the `dnsmasq_lines` array. Preserve all unrelated array entries. Replace the old matching wildcard directive in that array, or remove just that directive from its original included file. Retain exactly one wildcard owner.
-3. Run `sudo pihole-FTL dnsmasq-test`. If it succeeds, run `sudo systemctl restart pihole-FTL` and query a wildcard name. Restore the backed-up configuration if validation fails.
-
-The module manages the dedicated file and restarts FTL on later file changes or repairs. It does not edit the rest of `pihole.toml`, migrate legacy directives, or provide automatic rollback. A restart briefly interrupts DNS.
+To migrate from the existing wildcard, first declare or import all names currently relying on it and verify their explicit records. Then back up and remove the old wildcard at its current source, validate the Pi-hole configuration, and reload it using the installed version's procedure. Terraform does not remove that existing unmanaged directive. If an earlier version of this configuration was applied, remove its `conf-file=/etc/pihole/hsp-dns.conf` include before applying a plan that deletes that file.
 
 ## Provision stopped guests
 
@@ -82,12 +78,12 @@ Before migrating real services, verify:
 - LAN clients cannot bypass restrictions through a public-service allow. Verify effective host rules, including Proxmox's implicit management allowances.
 - An external EdgeRouter-forwarded connection receives replies. Check observed source addresses and SDN SNAT behavior.
 - Unallocated aggregate addresses terminate locally. Host reboot restores routing and filtering before workload autostart.
-- Direct/proxy DNS aliases override the wildcard correctly; updates and deletion preserve unrelated records.
+- Direct/proxy DNS aliases resolve correctly; updates and deletion preserve unrelated records.
 - Removing a disposable guest cleans up its DNS, firewall, subnet, and VNet, leaves no staged SDN changes, and produces a subsequent empty plan.
 - Once VPNs/proxies are configured, admin and family clients have their intended distinct access.
 
 Remove guests through a reviewed Terraform plan. Do not reuse IDs/slots until cleanup is verified. Keep the routing foundation while guests or router routes depend on it.
 
-Before removing the wildcard module, remove its `conf-file=` include locally or replace it with your intended DNS configuration, validate, and restart FTL. Deleting the file while leaving a required include would break DNS. Stop/remove guests and router forwards/routes before dismantling host routing. The routing service removes its own aggregate route when stopped; IPv4 forwarding is left enabled because other services may depend on it.
+Stop/remove guests and router forwards/routes before dismantling host routing. The routing service removes its own aggregate route when stopped; IPv4 forwarding is left enabled because other services may depend on it.
 
 Use the Proxmox console and your configuration backups for recovery, then reconcile Terraform state. For Pi-hole, restore the previous local configuration, validate it, and restart FTL before retrying. The shared physical LAN uplink still needs a protected, patched Proxmox host.

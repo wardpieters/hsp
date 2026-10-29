@@ -1,6 +1,6 @@
 # Self-hosting Infrastructure Implementation Plan
 
-> Historical plan, superseded in part on 2026-10-29 by the user's Terraform-only scope correction. The deployment wrapper, host helpers, and their tests described below have been removed. Current configuration uses native Terraform resources and commands; Pi-hole include adoption and pre-start inspection are documented operator steps. Follow `docs/deployment.md` for the current workflow.
+> Historical plan, superseded in part on 2026-10-29 by the user's Terraform-only scope correction and clarification that a wildcard is not required. The deployment wrapper, host helpers, Pi-hole host-file module, and their tests described below have been removed. Current configuration uses native Terraform resources/commands and explicit Pi-hole API records. Follow `docs/deployment.md` for the current workflow.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 

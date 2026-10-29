@@ -4,10 +4,21 @@ Terraform configuration for one Proxmox VE 9.x node and Pi-hole v6. Each VM gets
 
 Declare a guest once in [the home inventory](environments/home/home.tfvars.example). Its DNS aliases can resolve directly to the guest or to a selected reverse proxy. Separate admin and family VPN roles generate different access rules.
 
+For example, inside a guest declaration:
+
+```hcl
+dns = {
+  cloud      = { mode = "proxy", proxy_name = "proxy-private" }
+  cloud-host = { mode = "direct" }
+}
+```
+
+The `dns_records` module creates `cloud.home.ward.nl` pointing to the declared private proxy and `cloud-host.home.ward.nl` pointing to this guest, using Pi-hole's local DNS API. Every desired name is explicit; no wildcard, Pi-hole host file, or Pi-hole SSH access is needed.
+
 | Configuration | Resources |
 | --- | --- |
 | `environments/home` | SDN, VMs, firewalls, and per-guest Pi-hole DNS records |
-| `environments/host-config` | Persistent host routing and the Pi-hole wildcard file, using Terraform's SSH file/service provider |
+| `environments/host-config` | Persistent Proxmox host routing, using Terraform's SSH file/service provider |
 | `modules/` | Reusable network, VM, DNS, and host configuration modules |
 
 Deploy using ordinary Terraform commands, after filling in the private variables and completing the prerequisites in the [deployment guide](docs/deployment.md):
@@ -18,7 +29,7 @@ terraform -chdir=environments/home plan -var-file=home.tfvars -parallelism=1 -ou
 terraform -chdir=environments/home apply -parallelism=1 home.tfplan
 ```
 
-Guests default to stopped. Inspect their networking and firewall enforcement, then set `started = true` in a second apply. Pi-hole's existing wildcard needs a one-time host-local include registration; subsequent target changes and per-guest DNS records are managed by Terraform.
+Guests default to stopped. Inspect their networking and firewall enforcement, then set `started = true` in a second apply.
 
 Local validation and mock-provider tests require only Terraform and Make:
 
