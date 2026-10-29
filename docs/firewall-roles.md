@@ -92,7 +92,7 @@ For the initial VPN model, clients use SNAT to the respective VPN gateway VM's a
 
 ## Inspect the generated configuration
 
-After applying, these outputs show the guest rules, proposed host policy, and router-forward inventory:
+The full `policies` and `host_policy` outputs are marked sensitive so Terraform collapses them in automatic plan/apply output. After applying, request an output by name to display its contents explicitly:
 
 ```sh
 terraform -chdir=environments/home output policies
