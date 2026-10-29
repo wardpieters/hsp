@@ -8,10 +8,13 @@ run "persistent_routing" {
       strcontains(system_file.routing_unit.content, "ExecStart=/usr/sbin/sysctl -w net.ipv4.ip_forward=1") &&
       strcontains(system_file.routing_unit.content, "ExecStart=/usr/sbin/ip -4 route replace blackhole 10.77.0.0/24 metric 42760") &&
       strcontains(system_file.routing_unit.content, "ExecStop=-/usr/sbin/ip -4 route del blackhole 10.77.0.0/24 metric 42760") &&
-      strcontains(system_file.startup_guard.content, "Requires=${system_service_systemd.routing.name}.service pve-firewall.service") &&
+      strcontains(system_file.startup_guard.content, "Wants=${system_service_systemd.routing.name}.service pve-firewall.service") &&
+      !strcontains(system_file.startup_guard.content, "Requires=") &&
+      strcontains(system_file.startup_guard.content, "ExecStartPre=/usr/bin/systemctl is-active --quiet ${system_service_systemd.routing.name}.service") &&
+      strcontains(system_file.startup_guard.content, "ExecStartPre=/usr/bin/systemctl is-active --quiet pve-firewall.service") &&
       system_service_systemd.routing.enabled && system_service_systemd.routing.status == "started"
     )
-    error_message = "Routing must persist across boot, require the firewall before guest startup, and clean up only its aggregate route."
+    error_message = "Routing must persist and gate guest autostart without propagating a routing stop into Proxmox's stop-all-guests action."
   }
 }
 run "unit_repair" {

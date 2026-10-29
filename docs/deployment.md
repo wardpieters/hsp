@@ -36,7 +36,20 @@ terraform -chdir=environments/host-config plan -var-file=hosts.tfvars -out=hosts
 terraform -chdir=environments/host-config apply hosts.tfplan
 ```
 
-Native Terraform file/service resources install a systemd unit on Proxmox. It enables IPv4 forwarding and maintains a metric-42760 blackhole route for the aggregate. Connected guest `/30` routes win over that aggregate, while unused addresses terminate locally. A `pve-guests.service` drop-in requires routing and `pve-firewall.service` before autostart. The unit uses the host's standard `sysctl` and `ip` commands; there are no custom host scripts.
+Native Terraform file/service resources install and immediately start a systemd unit on Proxmox. It enables IPv4 forwarding and maintains a metric-42760 blackhole route for the aggregate. Connected guest `/30` routes win over that aggregate, while unused addresses terminate locally. A `pve-guests.service` drop-in orders routing and `pve-firewall.service` before autostart and checks that both are active. It uses `Wants` plus separate `ExecStartPre` checks, so stopping routing does not propagate a stop into `pve-guests` and its node-wide guest shutdown action. Startup checks apply to all guests autostarted through that Proxmox service. The unit uses the host's standard `sysctl` and `ip` commands; there are no custom host scripts.
+
+Before first activation on a running node, inspect these read-only outputs:
+
+```sh
+sysctl net.ipv4.ip_forward
+ip -4 route show table all
+ip -4 rule show
+systemctl is-active pve-firewall proxmox-firewall
+```
+
+Confirm the aggregate is unused across existing LAN/guest/VPN networks, the established `pve-firewall` backend is already active, and forwarding between existing interfaces is permitted by your current policy. The routing unit's `Requires=pve-firewall.service` starts that service if inactive; verify this before applying. A blackhole `/24` takes precedence over broader routes even with a high metric; do not use it to cover an existing network. Changing `ip_forward` from 0 to 1 affects the whole host and resets IPv4 configuration defaults, so review existing custom sysctls and filtering before making that change. See the [kernel forwarding documentation](https://docs.kernel.org/networking/ip-sysctl.html).
+
+Writing the unit file alone does not execute it. The service resource enables and starts it during this apply. Neither activation nor `Before=pve-guests.service` restarts existing guests. The startup drop-in takes effect on future Proxmox guest-service starts; do not manually restart `pve-guests.service` to test it. If an older `Requires`-based drop-in was already applied, update that drop-in and reload systemd before stopping/replacing the routing service.
 
 ## Declare local DNS records
 

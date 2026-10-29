@@ -49,8 +49,18 @@ resource "system_folder" "startup_dropin" {
   gid  = 0
 }
 resource "system_file" "startup_guard" {
-  path    = "${system_folder.startup_dropin.path}/hsp.conf"
-  content = "[Unit]\nRequires=${local.routing_service}.service pve-firewall.service\nAfter=${local.routing_service}.service pve-firewall.service\n"
+  path = "${system_folder.startup_dropin.path}/hsp.conf"
+  # Requires would propagate a routing stop to pve-guests, whose ExecStop stops
+  # every guest on the node. Gate startup without coupling runtime shutdown.
+  content = <<-UNIT
+    [Unit]
+    Wants=${local.routing_service}.service pve-firewall.service
+    After=${local.routing_service}.service pve-firewall.service
+
+    [Service]
+    ExecStartPre=/usr/bin/systemctl is-active --quiet ${local.routing_service}.service
+    ExecStartPre=/usr/bin/systemctl is-active --quiet pve-firewall.service
+  UNIT
   mode    = "644"
   uid     = 0
   gid     = 0

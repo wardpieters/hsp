@@ -9,3 +9,5 @@ Run `make init` and `make check` to initialize the pinned providers, check forma
 Verified on 2026-10-29 with Terraform 1.14.8: all eight configurations validate, all 32 Terraform tests pass, recursive formatting passes, and Git whitespace checks pass. No project source files require Python.
 
 The tests exercise address bounds/overlaps, stable slots, DNS targets, firewall ordering, inventory/role restrictions, SDN repair/apply lifecycles, and host-file repair/service triggers. Provider mocks cannot prove real packet filtering, systemd command execution, Pi-hole behavior, or reboot persistence. Those checks remain in the [deployment guide](deployment.md).
+
+The host startup regression also checks that the `pve-guests` drop-in uses startup checks without a `Requires` relationship. That relationship could propagate an explicit routing stop into Proxmox's node-wide guest shutdown action. This is a configuration regression test, not a live systemd execution test.
