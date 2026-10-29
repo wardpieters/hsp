@@ -39,6 +39,32 @@ run "paired_rules_and_dns" {
     error_message = "Omitting bootstrap must not grant administrator LAN access to guests."
   }
 }
+run "literal_ipv4_migration_connections" {
+  command = plan
+  variables {
+    connections = [
+      { from = "proxy", to = "cloud", protocol = "tcp", port = 8080 },
+      { from = "cloud", to = "172.16.10.30", protocol = "tcp", port = 80 },
+      { from = "cloud", to = "172.16.10.30", protocol = "tcp", port = 443 },
+    ]
+  }
+  assert {
+    condition     = toset([for r in output.policies["cloud"] : "${r.type}:${r.action}:${r.proto}:${r.dport}" if r.dest == "172.16.10.30/32"]) == toset(["out:ACCEPT:tcp:80", "out:ACCEPT:tcp:443"])
+    error_message = "Literal IPv4 destinations must create only the requested outbound /32 and destination-port exceptions."
+  }
+  assert {
+    condition     = alltrue([for i, r in output.policies["cloud"] : i < index([for rule in output.policies["cloud"] : rule.comment], "hsp:protect-out:172.16.0.0/12") if r.dest == "172.16.10.30/32"])
+    error_message = "Explicit migration exceptions must precede the protected private-network drop."
+  }
+  assert {
+    condition     = alltrue(flatten([for rules in values(output.policies) : [for r in rules : !(r.type == "in" && r.source == "172.16.10.30/32")]])) && length([for r in output.policies["cloud"] : r if r.type == "out" && r.action == "ACCEPT" && r.dest == "0.0.0.0/0"]) == 0
+    error_message = "External destinations must not add inbound access or general internet egress."
+  }
+  assert {
+    condition     = contains([for r in output.policies["proxy"] : "${r.type}:${coalesce(r.dest, "-")}:${coalesce(r.dport, "-")}"], "out:10.77.0.6/32:8080") && contains([for r in output.policies["cloud"] : "${r.type}:${coalesce(r.source, "-")}:${coalesce(r.dport, "-")}"], "in:10.77.0.2/32:8080")
+    error_message = "Named guest connections must retain their paired egress and ingress rules alongside IP destinations."
+  }
+}
 run "lan_public_ports_are_per_guest" {
   command = plan
   variables {
@@ -217,6 +243,38 @@ run "reject_vpn_to_admin" {
     private_proxy_name = "proxy"
     guests             = { vpn = { vm_id = 100, slot = 0, vnet_id = "hsp100", role = "service_vpn" }, proxy = { vm_id = 101, slot = 1, vnet_id = "hsp101", role = "private_proxy" } }
     connections        = [{ from = "vpn", to = "proxy", protocol = "tcp", port = 22 }]
+  }
+  expect_failures = [var.connections]
+}
+run "reject_unknown_connection_destination" {
+  command = plan
+  variables { connections = [{ from = "cloud", to = "missing", protocol = "tcp", port = 80 }] }
+  expect_failures = [var.connections]
+}
+run "reject_connection_subnet_destination" {
+  command = plan
+  variables { connections = [{ from = "cloud", to = "172.16.10.0/24", protocol = "tcp", port = 80 }] }
+  expect_failures = [var.connections]
+}
+run "reject_connection_ipv6_destination" {
+  command = plan
+  variables { connections = [{ from = "cloud", to = "fd00::30", protocol = "tcp", port = 443 }] }
+  expect_failures = [var.connections]
+}
+run "reject_connection_platform_ip_destination" {
+  command = plan
+  variables { connections = [{ from = "cloud", to = "10.77.0.2", protocol = "tcp", port = 443 }] }
+  expect_failures = [var.connections]
+}
+run "reject_service_vpn_external_ip" {
+  command = plan
+  variables {
+    private_proxy_name = "proxy"
+    guests = {
+      proxy = { vm_id = 100, slot = 0, vnet_id = "hsp100", role = "private_proxy" }
+      cloud = { vm_id = 101, slot = 1, vnet_id = "hsp101", role = "service_vpn" }
+    }
+    connections = [{ from = "cloud", to = "172.16.10.30", protocol = "tcp", port = 443 }]
   }
   expect_failures = [var.connections]
 }

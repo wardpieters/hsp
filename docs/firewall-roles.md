@@ -39,7 +39,7 @@ The protected ranges include the platform aggregate, `host_address/32`, all conf
 
 | Setting | Generated behavior |
 | --- | --- |
-| `connections` | Adds an outgoing allow on `from` and an incoming allow on `to`, restricted to the other guest's `/32`, protocol, and destination port. Both names must identify declared guests. Each exception permits that specific direction of connection initiation. |
+| `connections` | `from` names a declared guest. `to` accepts another guest name or a bare IPv4 address outside `platform_cidr`. Named destinations get paired outgoing/incoming rules; IPv4 destinations get only an outgoing `/32` rule on the source guest. Each exception is limited to its TCP/UDP destination port and precedes protected-network drops. Service VPN destination restrictions still apply. |
 | `bootstrap = true` | On that guest only, allows incoming TCP 22 from each IPv4 `/32` in `bootstrap_admin_cidrs`, before protected-source blocks. Available to every role and defaults to `false`. Set it back to `false` and apply after setup to remove the exception. Guest bootstrap works independently of `manage_host_firewall`. |
 | `public_ports` | Allows incoming TCP/UDP on each listed destination port from `0.0.0.0/0`, after protected-source blocks. There is no public source-IP allowlist. Ports 22 and 8006 are rejected for every role; `private_proxy` and `management` reject all public ports. Defaults to empty. |
 | `public_ports_lan_cidrs` | Top-level IPv4 subnet list in `home.tfvars`, default `[]`. These LAN sources may reach each VM's declared `public_ports` before protected-source drops. VMs without public ports receive no exception. Subnets must be canonical, narrower than `/0`, and must not overlap `platform_cidr`. |
@@ -47,6 +47,22 @@ The protected ranges include the platform aggregate, `host_address/32`, all conf
 | `http_proxy_name` | Optional top-level guest name, default `null`. Every other declared guest, including `service_vpn`, receives outgoing TCP 3128 to that guest, with matching ingress for each client's `/32`. New guests are included automatically. Configure the proxy guest's internet egress separately. |
 
 Example VPN listener declarations use UDP 51820 and 51821; those ports are inventory choices, not automatic role defaults. EdgeRouter forwarding and a listening VPN service are separate requirements. Likewise, `public_proxy` does not automatically open TCP 80/443.
+
+### Access to existing servers during migration
+
+Add explicit IPv4 destinations to the existing top-level `connections` list in `home.tfvars`, for example:
+
+```hcl
+connections = [
+  # Keep existing guest-to-guest dependencies here too.
+  { from = "http-proxy", to = "172.16.10.30", protocol = "tcp", port = 80 },
+  { from = "http-proxy", to = "172.16.10.30", protocol = "tcp", port = 443 },
+]
+```
+
+This allows `http-proxy` to initiate connections to that single address on TCP 80/443, including when it is inside a protected private range. Other destination addresses and ports retain their existing restrictions. The remote server's firewall and network routes are managed separately. Remove the temporary entries and apply after migration.
+
+Use declared guest names for destinations inside `platform_cidr` so Terraform can configure both guests' firewalls. IP destinations accept bare IPv4 addresses, without CIDR suffixes; subnets, hostnames, and IPv6 are not supported. The `service_vpn` role remains restricted to its selected private and HTTP proxies.
 
 ### LAN access to public ports
 
@@ -72,13 +88,13 @@ internet_egress_ports = [
 
 Each entry accepts `tcp` or `udp` and an integer port from 1 to 65535. Allowed destinations cover IPv4 addresses outside the protected ranges; these rules do not restrict access to specific websites or package repositories. IPv6 remains blocked. The former `allow_updates` flag has been replaced by this list; there is no automatic TCP 80/443 allowance.
 
-An empty list preserves replies to permitted inbound connections, approved DNS/NTP targets, and explicitly allowed internal dependencies. `public_ports` controls incoming services separately. DNS and NTP targets remain allowed even if you configure external resolver or time-server addresses.
+An empty list preserves replies to permitted inbound connections, approved DNS/NTP targets, and declared guest/IP dependencies. `public_ports` controls incoming services separately. DNS and NTP targets remain allowed even if you configure external resolver or time-server addresses.
 
 ### Shared HTTP forward proxy
 
 Set the top-level `http_proxy_name = "http-proxy"` to select a declared guest. The inventory example gives that guest VM ID 1006, slot 6 (`10.77.0.26`), a direct `http-proxy.home.ward.nl` DNS record, and outbound TCP 80/443. Its `public_ports` is empty. Other guests retain empty direct internet egress lists and can use `http://http-proxy.home.ward.nl:3128` after Squid and their proxy settings are configured.
 
-This grants proxied web access to all declared guests, including the family VPN VM. Squid must listen on TCP 3128 and apply appropriate client and destination ACLs. Terraform provisions the VM and firewall/DNS rules; install Squid and configure proxy use inside clients separately. Access to the proxy is explicit HTTP proxying, rather than automatic redirection of all guest traffic. Proxmox still blocks the proxy's connections to protected destinations except existing narrow infrastructure exceptions.
+This grants proxied web access to all declared guests, including the family VPN VM. Squid must listen on TCP 3128 and apply appropriate client and destination ACLs. Terraform provisions the VM and firewall/DNS rules; install Squid and configure proxy use inside clients separately. Access to the proxy is explicit HTTP proxying, rather than automatic redirection of all guest traffic. Proxmox blocks the proxy's connections to protected destinations except declared dependencies and narrow infrastructure exceptions. An IP dependency from `http-proxy` also allows Squid to relay matching requests for its clients, subject to its ACLs.
 
 DNS target selection and firewall dependencies are configured separately. For example, pointing `web.home.ward.nl` at `proxy-private` also requires an appropriate `proxy-private` → `web` backend connection and a corresponding proxy route. A DNS alias alone adds no firewall exception.
 

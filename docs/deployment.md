@@ -107,7 +107,7 @@ Your workstation's source IP must match an entry in `bootstrap_admin_cidrs`, and
 Before migrating real services, verify:
 
 - Unrelated guests cannot reach each other, host management, gateway management addresses, or LAN services. Test IPv6/link-local traffic and IP/MAC spoofing too.
-- Explicit dependencies work only on their declared ports; approved DNS and NTP work. Internet connections succeed only on each guest's configured egress ports, and HTTP/HTTPS remain blocked when omitted.
+- Explicit guest/IP dependencies work only on their declared destination addresses and ports; approved DNS and NTP work. General internet access uses each guest's configured egress ports; with an empty list, only explicit dependencies and infrastructure exceptions remain permitted.
 - Bootstrap adds SSH access only from the listed administrator `/32` addresses. Disabling it removes that exception; other guests retain their existing policies.
 - Only LAN subnets in `public_ports_lan_cidrs` can use the public-port exceptions. Other ports retain their restrictions. Verify effective host rules, including Proxmox's implicit management allowances.
 - An external EdgeRouter-forwarded connection receives replies. Check observed source addresses and SDN SNAT behavior.

@@ -123,16 +123,23 @@ variable "guests" {
   }
 }
 variable "connections" {
-  description = "Allowed guest-to-guest service dependencies; creates both egress and ingress."
+  description = "Service dependencies from a declared guest to another guest (paired rules) or an IPv4 address outside platform_cidr (egress only)."
   type        = list(object({ from = string, to = string, protocol = string, port = number }))
   default     = []
   validation {
     condition = alltrue([for c in var.connections : try(
-      c.from != c.to && contains(keys(var.guests), c.from) && contains(keys(var.guests), c.to) &&
-      contains(["tcp", "udp"], c.protocol) && c.port >= 1 && c.port <= 65535 && floor(c.port) == c.port &&
-      (var.guests[c.from].role != "service_vpn" ||
-        (c.to == var.private_proxy_name && c.protocol == "tcp" && c.port == 443) ||
-    (c.to == var.http_proxy_name && c.protocol == "tcp" && c.port == 3128)), false)])
-    error_message = "Connections require existing distinct peers and numeric ports; the service VPN may reach only its private proxy over TCP 443 and the selected HTTP proxy over TCP 3128."
+      c.from != c.to && contains(keys(var.guests), c.from) &&
+      (contains(keys(var.guests), c.to) || try(
+        can(cidrnetmask("${c.to}/32")) &&
+      cidrhost("${c.to}/${split("/", var.platform_cidr)[1]}", 0) != cidrhost(var.platform_cidr, 0), false)) &&
+    contains(["tcp", "udp"], c.protocol) && c.port >= 1 && c.port <= 65535 && floor(c.port) == c.port, false)])
+    error_message = "Connections require a declared source guest, a different destination guest or a bare IPv4 address outside platform_cidr, TCP/UDP, and an integer port from 1 to 65535."
+  }
+  validation {
+    condition = alltrue([for c in var.connections : try(
+      var.guests[c.from].role != "service_vpn" ||
+      (c.to == var.private_proxy_name && c.protocol == "tcp" && c.port == 443) ||
+    (c.to == var.http_proxy_name && c.protocol == "tcp" && c.port == 3128), false)])
+    error_message = "The service VPN may reach only its private proxy over TCP 443 and the selected HTTP proxy over TCP 3128."
   }
 }

@@ -17,7 +17,7 @@ locals {
       direction = "in", address = cidr, protocol = "tcp", ports = "22", description = "bootstrap SSH:${cidr}"
     } if g.bootstrap],
     [for c in local.connections : {
-      direction = "out", address = "${module.network.networks[c.to].address}/32", protocol = c.protocol,
+      direction = "out", address = "${try(module.network.networks[c.to].address, c.to)}/32", protocol = c.protocol,
       ports     = tostring(c.port), description = "${c.from}->${c.to}:${c.port}"
     } if c.from == name],
     [for c in local.connections : {
