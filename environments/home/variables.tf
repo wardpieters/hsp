@@ -45,7 +45,8 @@ variable "protected_cidrs" {
   }
 }
 variable "bootstrap_admin_cidrs" {
-  type = list(string)
+  description = "Administrator IPv4 /32 sources for guest bootstrap SSH and, when managed, Proxmox host access."
+  type        = list(string)
   validation {
     condition     = alltrue([for c in var.bootstrap_admin_cidrs : try(cidrnetmask(c) != "" && split("/", c)[1] == "32", false)])
     error_message = "Bootstrap management access must name individual IPv4 /32 addresses."
@@ -73,6 +74,7 @@ variable "guests" {
   type = map(object({
     vm_id         = number, slot = number, vnet_id = string, role = optional(string, "workload"),
     started       = optional(bool, false), on_boot = optional(bool, false),
+    bootstrap     = optional(bool, false),
     cores         = optional(number, 2), memory_mb = optional(number, 2048), disk_gb = optional(number, 16),
     backup        = optional(bool, true),
     allow_updates = optional(bool, false),

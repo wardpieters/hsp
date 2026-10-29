@@ -22,6 +22,7 @@ private_proxy_name  = "proxy-private"
 guests = {
   vpn-admin = {
     vm_id = 1000, slot = 0, vnet_id = "hsp110", role = "admin_vpn"
+    bootstrap = false # Set true for SSH from bootstrap_admin_cidrs during setup.
     public_ports = [{ protocol = "udp", port = 51820 }]
     allow_updates = true
   }

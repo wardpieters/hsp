@@ -34,6 +34,50 @@ run "paired_rules_and_dns" {
     condition     = output.dns_targets["cloud"] == "10.77.0.2"
     error_message = "The application alias must resolve to its declared proxy."
   }
+  assert {
+    condition     = alltrue(flatten([for rules in values(output.policies) : [for r in rules : !(r.action == "ACCEPT" && contains(var.bootstrap_admin_cidrs, coalesce(r.source, "-")))]]))
+    error_message = "Omitting bootstrap must not grant administrator LAN access to guests."
+  }
+}
+run "bootstrap_ssh_is_scoped_to_selected_guest" {
+  command = plan
+  variables {
+    bootstrap_admin_cidrs = ["192.168.1.42/32", "192.168.1.43/32"]
+    connections           = []
+    guests = {
+      vpn = { vm_id = 1000, slot = 0, vnet_id = "hsp1000", role = "admin_vpn", bootstrap = true }
+      app = { vm_id = 1001, slot = 1, vnet_id = "hsp1001", bootstrap = false }
+    }
+  }
+  assert {
+    condition = toset([for r in output.policies["vpn"] : "${r.type}:${r.action}:${r.source}:${r.proto}:${r.dport}" if contains(var.bootstrap_admin_cidrs, coalesce(r.source, "-"))]) == toset([
+      "in:ACCEPT:192.168.1.42/32:tcp:22",
+      "in:ACCEPT:192.168.1.43/32:tcp:22"
+    ])
+    error_message = "Bootstrap must grant only incoming TCP 22 from each listed administrator /32."
+  }
+  assert {
+    condition     = try(alltrue([for source in var.bootstrap_admin_cidrs : index([for r in output.policies["vpn"] : r.source], source) < index([for r in output.policies["vpn"] : r.source], "192.168.1.0/24")]), false)
+    error_message = "Bootstrap SSH exceptions must precede the protected LAN drop."
+  }
+  assert {
+    condition     = alltrue([for r in output.policies["app"] : !(r.action == "ACCEPT" && contains(var.bootstrap_admin_cidrs, coalesce(r.source, "-")))])
+    error_message = "Enabling bootstrap on one guest must not open another guest."
+  }
+}
+run "bootstrap_ssh_disabled" {
+  command = plan
+  variables {
+    connections = []
+    guests = {
+      vpn = { vm_id = 1000, slot = 0, vnet_id = "hsp1000", role = "admin_vpn", bootstrap = false }
+      app = { vm_id = 1001, slot = 1, vnet_id = "hsp1001" }
+    }
+  }
+  assert {
+    condition     = alltrue(flatten([for rules in values(output.policies) : [for r in rules : !(r.action == "ACCEPT" && contains(var.bootstrap_admin_cidrs, coalesce(r.source, "-")))]]))
+    error_message = "Turning bootstrap off must remove the administrator SSH exceptions."
+  }
 }
 run "reject_duplicate_slots" {
   command = plan

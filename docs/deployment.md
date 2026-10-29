@@ -86,12 +86,25 @@ Set only the inspected guests to `started = true`, then repeat the normal plan/a
 
 Install VPN/proxy software through your normal configuration process. The admin VPN has explicit management/guest SSH access; the family VPN has HTTPS to the private proxy plus approved DNS/NTP/update access. VPN gateways must authenticate peers, prevent spoofing, and SNAT clients to their respective gateway IPs in this model. Configure reverse proxy routes and TLS separately. DNS records alone do not configure a proxy.
 
+### Bootstrap guest SSH
+
+For initial setup, add `bootstrap = true` inside the selected guest's entry in `home.tfvars`, for example `guests.vpn-admin`. This allows incoming TCP 22 from each `bootstrap_admin_cidrs` IPv4 `/32` before the guest's protected LAN block. Bootstrap defaults to `false` and applies only to the selected guest. It works with `manage_host_firewall = false` because it manages the guest firewall directly.
+
+Apply the change through the normal plan/apply workflow. Start the inspected guest with `started = true`, ensure your workstation can route to its address using the EdgeRouter aggregate route, and connect using the configured SSH key. With `vpn-admin` in slot 0 of `10.77.0.0/24` and the default username:
+
+```sh
+ssh ward@10.77.0.2
+```
+
+Your workstation's source IP must match an entry in `bootstrap_admin_cidrs`, and the guest image must provide a running SSH server. Once VPN access works, set `bootstrap = false` and apply again to remove the bootstrap SSH rule. The administrator list continues to control the separate Proxmox host allowances when host firewall management is enabled.
+
 ## Live acceptance and removal
 
 Before migrating real services, verify:
 
 - Unrelated guests cannot reach each other, host management, gateway management addresses, or LAN services. Test IPv6/link-local traffic and IP/MAC spoofing too.
 - Explicit dependencies work only on their declared ports; approved DNS, NTP, and optional update traffic work.
+- Bootstrap adds SSH access only from the listed administrator `/32` addresses. Disabling it removes that exception; other guests retain their existing policies.
 - LAN clients cannot bypass restrictions through a public-service allow. Verify effective host rules, including Proxmox's implicit management allowances.
 - An external EdgeRouter-forwarded connection receives replies. Check observed source addresses and SDN SNAT behavior.
 - Unallocated aggregate addresses terminate locally. Host reboot restores routing and filtering before workload autostart.

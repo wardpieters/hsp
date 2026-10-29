@@ -10,6 +10,9 @@ locals {
   )
   connections = distinct(concat(var.connections, local.role_connections))
   allow_rules = { for name, g in var.guests : name => concat(
+    [for cidr in var.bootstrap_admin_cidrs : {
+      direction = "in", address = cidr, protocol = "tcp", ports = "22", description = "bootstrap SSH:${cidr}"
+    } if g.bootstrap],
     [for c in local.connections : {
       direction = "out", address = "${module.network.networks[c.to].address}/32", protocol = c.protocol,
       ports     = tostring(c.port), description = "${c.from}->${c.to}:${c.port}"

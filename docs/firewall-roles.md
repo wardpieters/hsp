@@ -40,6 +40,7 @@ The protected ranges include the platform aggregate, `host_address/32`, all conf
 | Setting | Generated behavior |
 | --- | --- |
 | `connections` | Adds an outgoing allow on `from` and an incoming allow on `to`, restricted to the other guest's `/32`, protocol, and destination port. Both names must identify declared guests. Each exception permits that specific direction of connection initiation. |
+| `bootstrap = true` | On that guest only, allows incoming TCP 22 from each IPv4 `/32` in `bootstrap_admin_cidrs`, before protected-source blocks. Available to every role and defaults to `false`. Set it back to `false` and apply after setup to remove the exception. Guest bootstrap works independently of `manage_host_firewall`. |
 | `public_ports` | Allows incoming TCP/UDP on each listed destination port from `0.0.0.0/0`, after protected-source blocks. There is no public source-IP allowlist. Ports 22 and 8006 are rejected for every role; `private_proxy` and `management` reject all public ports. Defaults to empty. |
 | `allow_updates = true` | Allows outgoing TCP 80/443 to IPv4 destinations outside the protected ranges. This permits general HTTP/HTTPS traffic; destinations are not restricted to update repositories. Defaults to `false`. |
 
@@ -52,7 +53,7 @@ DNS target selection and firewall dependencies are configured separately. For ex
 Rules are generated in this order, with the default DROP policy handling anything left unmatched:
 
 1. Drop IPv6 incoming and outgoing.
-2. Allow declared and role-generated dependencies, including admin VPN management access.
+2. Allow enabled bootstrap SSH, declared dependencies, and role-generated dependencies, including admin VPN management access.
 3. Allow approved DNS and NTP destinations.
 4. Drop protected IPv4 sources and destinations.
 5. Allow configured incoming public ports.
