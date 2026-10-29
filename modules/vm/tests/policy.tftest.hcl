@@ -11,7 +11,6 @@ variables {
   ntp_servers     = ["192.168.1.1"]
   ssh_public_keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGbQ7fxCXpGk6DckT2PRXJ5w5pMR6qksY6hOyw4mftR1 test"]
   public_ports    = [{ protocol = "tcp", port = 443 }]
-  allow_updates   = true
   allow_rules     = [{ direction = "in", address = "10.77.0.6/32", protocol = "tcp", ports = "8080", description = "private proxy" }]
 }
 run "stopped_and_isolated" {
@@ -37,12 +36,30 @@ run "stopped_and_isolated" {
     error_message = "IPv6 must not bypass IPv4 policy."
   }
   assert {
-    condition     = index([for r in output.rules : r.comment], "hsp:protect-in:192.168.1.0/24") < index([for r in output.rules : r.comment], "hsp:public:tcp:443") && index([for r in output.rules : r.comment], "hsp:protect-out:192.168.1.0/24") < index([for r in output.rules : r.comment], "hsp:updates")
-    error_message = "Broad public/update rules must never precede protected-network drops."
+    condition     = index([for r in output.rules : r.comment], "hsp:protect-in:192.168.1.0/24") < index([for r in output.rules : r.comment], "hsp:public:tcp:443")
+    error_message = "Broad public rules must never precede protected-network drops."
+  }
+  assert {
+    condition     = length([for r in output.rules : r if r.type == "out" && r.action == "ACCEPT" && r.dest == "0.0.0.0/0"]) == 0
+    error_message = "Guests must have no internet egress by default, including when public ingress is enabled."
   }
   assert {
     condition     = index([for r in output.rules : r.comment], "hsp:allow:private proxy") < index([for r in output.rules : r.comment], "hsp:protect-in:10.77.0.0/24")
     error_message = "Explicit dependencies must be usable before the default platform block."
+  }
+}
+run "explicit_internet_egress_ports" {
+  command = plan
+  variables {
+    internet_egress_ports = [{ protocol = "tcp", port = 8443 }, { protocol = "udp", port = 3478 }]
+  }
+  assert {
+    condition     = toset([for r in output.rules : "${r.proto}:${r.dport}" if r.type == "out" && r.action == "ACCEPT" && r.dest == "0.0.0.0/0"]) == toset(["tcp:8443", "udp:3478"])
+    error_message = "Internet egress must allow only the explicit TCP/UDP destination ports, without implicit HTTP/HTTPS."
+  }
+  assert {
+    condition     = alltrue([for i, r in output.rules : i > index([for rule in output.rules : rule.comment], "hsp:protect-out:192.168.1.0/24") if r.type == "out" && r.action == "ACCEPT" && r.dest == "0.0.0.0/0"])
+    error_message = "Internet allowances must follow protected-network drops so they cannot grant LAN access."
   }
 }
 run "backup_disabled" {
@@ -57,4 +74,24 @@ run "reject_public_ssh" {
   command = plan
   variables { public_ports = [{ protocol = "tcp", port = 22 }] }
   expect_failures = [var.public_ports]
+}
+run "reject_internet_egress_protocol" {
+  command = plan
+  variables { internet_egress_ports = [{ protocol = "icmp", port = 443 }] }
+  expect_failures = [var.internet_egress_ports]
+}
+run "reject_internet_egress_zero_port" {
+  command = plan
+  variables { internet_egress_ports = [{ protocol = "tcp", port = 0 }] }
+  expect_failures = [var.internet_egress_ports]
+}
+run "reject_internet_egress_large_port" {
+  command = plan
+  variables { internet_egress_ports = [{ protocol = "udp", port = 65536 }] }
+  expect_failures = [var.internet_egress_ports]
+}
+run "reject_internet_egress_fractional_port" {
+  command = plan
+  variables { internet_egress_ports = [{ protocol = "tcp", port = 443.5 }] }
+  expect_failures = [var.internet_egress_ports]
 }

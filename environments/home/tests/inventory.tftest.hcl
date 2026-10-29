@@ -39,6 +39,23 @@ run "paired_rules_and_dns" {
     error_message = "Omitting bootstrap must not grant administrator LAN access to guests."
   }
 }
+run "internet_egress_is_per_guest" {
+  command = plan
+  variables {
+    guests = {
+      proxy = { vm_id = 100, slot = 0, vnet_id = "hsp100", role = "private_proxy", internet_egress_ports = [{ protocol = "tcp", port = 443 }] }
+      cloud = { vm_id = 101, slot = 1, vnet_id = "hsp101" }
+    }
+  }
+  assert {
+    condition     = toset([for r in output.policies["proxy"] : "${r.proto}:${r.dport}" if r.type == "out" && r.action == "ACCEPT" && r.dest == "0.0.0.0/0"]) == toset(["tcp:443"])
+    error_message = "The guest's internet port list must propagate through the service and VM modules."
+  }
+  assert {
+    condition     = length([for r in output.policies["cloud"] : r if r.type == "out" && r.action == "ACCEPT" && r.dest == "0.0.0.0/0"]) == 0
+    error_message = "Enabling internet egress for one guest must not enable it for another."
+  }
+}
 run "bootstrap_ssh_is_scoped_to_selected_guest" {
   command = plan
   variables {

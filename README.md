@@ -6,6 +6,8 @@ Declare a guest once in [the home inventory](environments/home/home.tfvars.examp
 
 See the [role and firewall reference](docs/firewall-roles.md) for every role's automatic permissions, shared defaults, rule order, and configurable exceptions.
 
+Each VM's `internet_egress_ports` lists allowed outbound TCP/UDP destination ports and defaults to `[]`. Incoming services are configured with `public_ports`.
+
 For example, inside a guest declaration:
 
 ```hcl

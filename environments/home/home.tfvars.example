@@ -19,36 +19,37 @@ private_proxy_name  = "proxy-private"
 
 # New guests start stopped, without autostart. Configure VPN/proxy software later.
 # Each guest defaults to backup = true; set backup = false to exclude its disk.
+# Internet egress defaults to []; opt in per VM, e.g. [{ protocol = "tcp", port = 443 }].
 guests = {
   vpn-admin = {
     vm_id = 1000, slot = 0, vnet_id = "hsp110", role = "admin_vpn"
     bootstrap = false # Set true for SSH from bootstrap_admin_cidrs during setup.
     public_ports = [{ protocol = "udp", port = 51820 }]
-    allow_updates = true
+    internet_egress_ports = []
   }
   vpn-family = {
     vm_id = 1001, slot = 1, vnet_id = "hsp111", role = "service_vpn"
     public_ports = [{ protocol = "udp", port = 51821 }]
-    allow_updates = true
+    internet_egress_ports = []
   }
   proxy-public = {
     vm_id = 1002, slot = 2, vnet_id = "hsp112", role = "public_proxy"
     public_ports = [{ protocol = "tcp", port = 80 }, { protocol = "tcp", port = 443 }]
-    allow_updates = true
+    internet_egress_ports = []
   }
   proxy-private = {
     vm_id = 1003, slot = 3, vnet_id = "hsp113", role = "private_proxy"
-    allow_updates = true
+    internet_egress_ports = []
   }
   cloud = {
     vm_id = 1004, slot = 4, vnet_id = "hsp114"
     dns = { cloud = { mode = "proxy", proxy_name = "proxy-private" }, cloud-host = { mode = "direct" } }
-    allow_updates = true
+    internet_egress_ports = []
   }
   web = {
     vm_id = 1005, slot = 5, vnet_id = "hsp115"
     dns = { web = { mode = "proxy", proxy_name = "proxy-public" } }
-    allow_updates = true
+    internet_egress_ports = []
   }
 }
 connections = [

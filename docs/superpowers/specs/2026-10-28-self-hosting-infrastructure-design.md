@@ -84,7 +84,7 @@ For each guest:
 - Enable MAC filtering and populate the interface's `ipfilter-net0` set with the assigned IPv4 address. Do not assume a VM's cloud-init address automatically becomes an anti-spoofing rule.
 - Allow declared dependencies by destination and protocol/port; allow return traffic through state tracking.
 - Block other platform guests, home networks, VPN networks, and host management unless a specific exception precedes the block.
-- Allow optional internet egress only after protected-range blocks; the default update profile permits HTTPS/HTTP to external destinations, approved DNS over TCP/UDP 53, and approved NTP over UDP 123. Extra application egress is explicit.
+- Allow internet egress only on each guest's explicit `internet_egress_ports` TCP/UDP destination ports, after protected-range blocks. The default empty list grants no general internet egress. Approved DNS over TCP/UDP 53 and approved NTP over UDP 123 remain separate infrastructure exceptions.
 - Public ingress allows declared ports only after protected-source exclusions. SSH is never added by marking an application public.
 
 DNS to an existing Pi-hole on the LAN is a narrow infrastructure exception, not permission to reach its admin UI or other LAN services. Include every host gateway address and the host's management address in host protection; Proxmox services may listen on internal gateway addresses too.

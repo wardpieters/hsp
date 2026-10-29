@@ -1,12 +1,13 @@
 variable "guest" {
   type = object({
-    name         = string, vm_id = number, template_id = number, datastore_id = string,
-    started      = optional(bool, false), on_boot = optional(bool, false), cores = optional(number, 2),
-    memory_mb    = optional(number, 2048), disk_gb = optional(number, 16), allow_updates = optional(bool, false),
-    backup       = optional(bool, true),
-    public_ports = optional(list(object({ protocol = string, port = number })), []),
-    allow_rules  = optional(list(object({ direction = string, address = string, protocol = string, ports = string, description = string })), []),
-    dns          = optional(map(object({ mode = string, proxy_address = optional(string) })), {})
+    name                  = string, vm_id = number, template_id = number, datastore_id = string,
+    started               = optional(bool, false), on_boot = optional(bool, false), cores = optional(number, 2),
+    memory_mb             = optional(number, 2048), disk_gb = optional(number, 16),
+    backup                = optional(bool, true),
+    internet_egress_ports = optional(list(object({ protocol = string, port = number })), []),
+    public_ports          = optional(list(object({ protocol = string, port = number })), []),
+    allow_rules           = optional(list(object({ direction = string, address = string, protocol = string, ports = string, description = string })), []),
+    dns                   = optional(map(object({ mode = string, proxy_address = optional(string) })), {})
   })
 }
 variable "node_name" { type = string }
@@ -17,26 +18,26 @@ variable "ntp_servers" { type = list(string) }
 variable "ssh_public_keys" { type = list(string) }
 
 module "vm" {
-  source          = "../vm"
-  name            = var.guest.name
-  node_name       = var.node_name
-  vm_id           = var.guest.vm_id
-  template_id     = var.guest.template_id
-  datastore_id    = var.guest.datastore_id
-  network         = var.network
-  started         = var.guest.started
-  on_boot         = var.guest.on_boot
-  cores           = var.guest.cores
-  memory_mb       = var.guest.memory_mb
-  disk_gb         = var.guest.disk_gb
-  backup          = var.guest.backup
-  protected_cidrs = var.protected_cidrs
-  dns_servers     = var.dns_servers
-  ntp_servers     = var.ntp_servers
-  ssh_public_keys = var.ssh_public_keys
-  allow_updates   = var.guest.allow_updates
-  public_ports    = var.guest.public_ports
-  allow_rules     = var.guest.allow_rules
+  source                = "../vm"
+  name                  = var.guest.name
+  node_name             = var.node_name
+  vm_id                 = var.guest.vm_id
+  template_id           = var.guest.template_id
+  datastore_id          = var.guest.datastore_id
+  network               = var.network
+  started               = var.guest.started
+  on_boot               = var.guest.on_boot
+  cores                 = var.guest.cores
+  memory_mb             = var.guest.memory_mb
+  disk_gb               = var.guest.disk_gb
+  backup                = var.guest.backup
+  protected_cidrs       = var.protected_cidrs
+  dns_servers           = var.dns_servers
+  ntp_servers           = var.ntp_servers
+  ssh_public_keys       = var.ssh_public_keys
+  internet_egress_ports = var.guest.internet_egress_ports
+  public_ports          = var.guest.public_ports
+  allow_rules           = var.guest.allow_rules
 }
 module "dns" {
   source  = "../dns_records"

@@ -1,8 +1,10 @@
 # Deploying with Terraform
 
-The [role and firewall reference](firewall-roles.md) lists all guest roles, automatic permissions, shared rules, and the effects of `public_ports`, `connections`, and `allow_updates`.
+The [role and firewall reference](firewall-roles.md) lists all guest roles, automatic permissions, shared rules, and the effects of `public_ports`, `connections`, and `internet_egress_ports`.
 
 Each guest accepts `backup` in `home.tfvars`, defaulting to `true`. Set `backup = false` inside a guest's entry to exclude its managed `scsi0` disk from Proxmox backups. Backup-job schedules and any separate configuration-only backups are managed outside this configuration.
+
+Each guest's `internet_egress_ports` defaults to `[]`. Declare individual TCP/UDP destination ports when a VM needs internet access, including access to package repositories. Replace the former `allow_updates` flag with this explicit list. Approved DNS/NTP, declared internal dependencies, and replies to permitted inbound connections remain available independently. See the [outbound port examples](firewall-roles.md#outbound-internet-ports).
 
 ## Prerequisites
 
@@ -84,7 +86,7 @@ The route makes guests reachable at Layer 3 from the LAN. Host and guest firewal
 
 Set only the inspected guests to `started = true`, then repeat the normal plan/apply commands. Keep first provisioning and first start in separate applies: VM creation and its sibling firewall resources are not an atomic transaction. There is no additional automated activation guard. Set `on_boot = true` only after reboot-persistence checks pass.
 
-Install VPN/proxy software through your normal configuration process. The admin VPN has explicit management/guest SSH access; the family VPN has HTTPS to the private proxy plus approved DNS/NTP/update access. VPN gateways must authenticate peers, prevent spoofing, and SNAT clients to their respective gateway IPs in this model. Configure reverse proxy routes and TLS separately. DNS records alone do not configure a proxy.
+Install VPN/proxy software through your normal configuration process. The admin VPN has explicit management/guest SSH access; the family VPN has HTTPS to the private proxy plus approved DNS/NTP and any configured internet egress. VPN gateways must authenticate peers, prevent spoofing, and SNAT clients to their respective gateway IPs in this model. Configure reverse proxy routes and TLS separately. DNS records alone do not configure a proxy.
 
 ### Bootstrap guest SSH
 
@@ -103,7 +105,7 @@ Your workstation's source IP must match an entry in `bootstrap_admin_cidrs`, and
 Before migrating real services, verify:
 
 - Unrelated guests cannot reach each other, host management, gateway management addresses, or LAN services. Test IPv6/link-local traffic and IP/MAC spoofing too.
-- Explicit dependencies work only on their declared ports; approved DNS, NTP, and optional update traffic work.
+- Explicit dependencies work only on their declared ports; approved DNS and NTP work. Internet connections succeed only on each guest's configured egress ports, and HTTP/HTTPS remain blocked when omitted.
 - Bootstrap adds SSH access only from the listed administrator `/32` addresses. Disabling it removes that exception; other guests retain their existing policies.
 - LAN clients cannot bypass restrictions through a public-service allow. Verify effective host rules, including Proxmox's implicit management allowances.
 - An external EdgeRouter-forwarded connection receives replies. Check observed source addresses and SDN SNAT behavior.
