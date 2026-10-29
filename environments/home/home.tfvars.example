@@ -1,6 +1,7 @@
 # Illustrative inventory only. Replace these values after inspecting your network.
 # Copy to home.tfvars (ignored by Git). Keep credentials in environment variables.
 proxmox_endpoint     = "https://192.168.50.10:8006/"
+proxmox_insecure_tls = false # Set true to skip Proxmox certificate verification.
 pihole_url           = "https://192.168.50.53"
 pihole_insecure_tls  = false # Set true to skip Pi-hole certificate verification.
 node_name            = "pve"

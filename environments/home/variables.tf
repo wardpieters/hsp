@@ -2,8 +2,13 @@ variable "proxmox_endpoint" {
   type = string
   validation {
     condition     = can(regex("^https://[^/@?#]+/?$", var.proxmox_endpoint))
-    error_message = "Use the trusted HTTPS Proxmox endpoint without embedded credentials or a path."
+    error_message = "Use the HTTPS Proxmox endpoint without embedded credentials or a path."
   }
+}
+variable "proxmox_insecure_tls" {
+  description = "Skip TLS certificate verification for the Proxmox API."
+  type        = bool
+  default     = false
 }
 variable "pihole_url" {
   type = string

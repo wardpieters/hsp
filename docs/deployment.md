@@ -10,7 +10,7 @@ Prepare a trusted cloud-init QEMU template with one NIC, a `scsi0` root disk no 
 
 Back up Proxmox network/SDN/firewall configuration and Pi-hole configuration. Preserve Proxmox console access during the rollout. Terraform does not automatically adopt existing guests, firewall lists, or DNS records: inspect and import them using the pinned provider's supported IDs before claiming ownership.
 
-Use HTTPS endpoints, a trusted Proxmox certificate, a dedicated Proxmox API identity, and authorized Pi-hole config-write credentials. Pi-hole certificate verification defaults to enabled; set `pihole_insecure_tls = true` in `home.tfvars` to skip it. Pi-hole application credentials may require `app_sudo`; review the needed permission explicitly. Supply secrets through your secret manager or shell session:
+Use HTTPS endpoints, a dedicated Proxmox API identity, and authorized Pi-hole config-write credentials. Certificate verification defaults to enabled for both APIs. Set `proxmox_insecure_tls = true` or `pihole_insecure_tls = true` in `home.tfvars` to skip verification for the corresponding API. Pi-hole application credentials may require `app_sudo`; review the needed permission explicitly. Supply secrets through your secret manager or shell session:
 
 - `PROXMOX_VE_API_TOKEN`: the provider's `user@realm!tokenid=secret` credential.
 - `TF_VAR_pihole_password`: the Pi-hole API credential.

@@ -1,6 +1,6 @@
 provider "proxmox" {
   endpoint = var.proxmox_endpoint
-  insecure = false
+  insecure = var.proxmox_insecure_tls
   # PROXMOX_VE_API_TOKEN comes from the operator's environment.
 }
 provider "pihole" {
