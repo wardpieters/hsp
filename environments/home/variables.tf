@@ -52,6 +52,19 @@ variable "bootstrap_admin_cidrs" {
     error_message = "Bootstrap management access must name individual IPv4 /32 addresses."
   }
 }
+variable "public_ports_lan_cidrs" {
+  description = "LAN IPv4 subnets allowed to reach each guest's declared public_ports."
+  type        = list(string)
+  default     = []
+  nullable    = false
+  validation {
+    condition = alltrue([for c in var.public_ports_lan_cidrs : try(
+      cidrnetmask(c) != "" && cidrhost(c, 0) == split("/", c)[0] && tonumber(split("/", c)[1]) > 0 &&
+      cidrhost("${split("/", c)[0]}/${min(tonumber(split("/", c)[1]), tonumber(split("/", var.platform_cidr)[1]))}", 0) !=
+    cidrhost("${split("/", var.platform_cidr)[0]}/${min(tonumber(split("/", c)[1]), tonumber(split("/", var.platform_cidr)[1]))}", 0), false)])
+    error_message = "Public-port LAN sources must be canonical IPv4 CIDRs, narrower than /0, and must not overlap platform_cidr."
+  }
+}
 variable "manage_host_firewall" {
   description = "Opt in after reviewing/importing the existing full node ruleset. Otherwise configure equivalent host protection before starting guests."
   type        = bool

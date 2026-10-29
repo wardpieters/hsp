@@ -82,7 +82,7 @@ Review the saved plan before applying it. Inspect the stopped clone's NIC, SDN b
 
 On the EdgeRouter, add the aggregate route from `router_route` via Proxmox's existing LAN IP. Add selected port forwards from `public_forwards` to guest IPs and ports. Check the existing WAN firewall/NAT permits replies. No VLAN configuration is needed. Do not forward Proxmox management or guest SSH.
 
-The route makes guests reachable at Layer 3 from the LAN. Host and guest firewalls enforce access restrictions. Protected/private sources are blocked before broad public-service allows, so LAN hairpin connections may be denied; use the intended VPN access.
+The route makes guests reachable at Layer 3 from the LAN. Host and guest firewalls enforce access restrictions. Set top-level `public_ports_lan_cidrs` in `home.tfvars` to allow selected LAN subnets to reach each guest's declared `public_ports`; the default `[]` keeps those LAN sources blocked. These narrow exceptions precede protected-source drops. Access through the router's public endpoint from inside the LAN also requires hairpin NAT. See the [LAN access reference](firewall-roles.md#lan-access-to-public-ports).
 
 ## Start inspected guests
 
@@ -109,7 +109,7 @@ Before migrating real services, verify:
 - Unrelated guests cannot reach each other, host management, gateway management addresses, or LAN services. Test IPv6/link-local traffic and IP/MAC spoofing too.
 - Explicit dependencies work only on their declared ports; approved DNS and NTP work. Internet connections succeed only on each guest's configured egress ports, and HTTP/HTTPS remain blocked when omitted.
 - Bootstrap adds SSH access only from the listed administrator `/32` addresses. Disabling it removes that exception; other guests retain their existing policies.
-- LAN clients cannot bypass restrictions through a public-service allow. Verify effective host rules, including Proxmox's implicit management allowances.
+- Only LAN subnets in `public_ports_lan_cidrs` can use the public-port exceptions. Other ports retain their restrictions. Verify effective host rules, including Proxmox's implicit management allowances.
 - An external EdgeRouter-forwarded connection receives replies. Check observed source addresses and SDN SNAT behavior.
 - Unallocated aggregate addresses terminate locally. Host reboot restores routing and filtering before workload autostart.
 - Direct/proxy DNS aliases resolve correctly; updates and deletion preserve unrelated records.

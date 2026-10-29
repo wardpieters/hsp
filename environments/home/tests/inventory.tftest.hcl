@@ -39,6 +39,31 @@ run "paired_rules_and_dns" {
     error_message = "Omitting bootstrap must not grant administrator LAN access to guests."
   }
 }
+run "lan_public_ports_are_per_guest" {
+  command = plan
+  variables {
+    public_ports_lan_cidrs = ["192.168.1.0/24"]
+    connections            = []
+    guests = {
+      vpn     = { vm_id = 1000, slot = 0, vnet_id = "hsp1000", role = "admin_vpn", public_ports = [{ protocol = "udp", port = 51821 }] }
+      web     = { vm_id = 1001, slot = 1, vnet_id = "hsp1001", role = "public_proxy", public_ports = [{ protocol = "tcp", port = 80 }, { protocol = "tcp", port = 443 }] }
+      private = { vm_id = 1002, slot = 2, vnet_id = "hsp1002", role = "private_proxy" }
+    }
+  }
+  assert {
+    condition     = toset([for r in output.policies["vpn"] : "${r.type}:${r.proto}:${r.dport}" if r.action == "ACCEPT" && r.source == "192.168.1.0/24"]) == toset(["in:udp:51821"]) && toset([for r in output.policies["web"] : "${r.type}:${r.proto}:${r.dport}" if r.action == "ACCEPT" && r.source == "192.168.1.0/24"]) == toset(["in:tcp:80", "in:tcp:443"])
+    error_message = "The top-level LAN setting must allow exactly each guest's own public ports across all module layers."
+  }
+  assert {
+    condition     = length([for r in output.policies["private"] : r if r.action == "ACCEPT" && r.source == "192.168.1.0/24"]) == 0
+    error_message = "A VM without public ports must not receive LAN access through this setting."
+  }
+}
+run "reject_guest_network_as_public_ports_lan" {
+  command = plan
+  variables { public_ports_lan_cidrs = ["10.77.0.0/25"] }
+  expect_failures = [var.public_ports_lan_cidrs]
+}
 run "internet_egress_is_per_guest" {
   command = plan
   variables {

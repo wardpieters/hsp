@@ -18,6 +18,9 @@ locals {
     [for ip in var.ntp_servers : merge(local.base_rule, {
       type = "out", dest = "${ip}/32", proto = "udp", dport = "123", comment = "hsp:ntp:${ip}"
     })],
+    flatten([for cidr in var.public_ports_lan_cidrs : [for p in var.public_ports : merge(local.base_rule, {
+      source = cidr, proto = p.protocol, dport = tostring(p.port), comment = "hsp:lan-public:${cidr}:${p.protocol}:${p.port}"
+    })]]),
     flatten([for c in local.protected : [
       merge(local.base_rule, { action = "DROP", source = c, comment = "hsp:protect-in:${c}" }),
       merge(local.base_rule, { type = "out", action = "DROP", dest = c, comment = "hsp:protect-out:${c}" })

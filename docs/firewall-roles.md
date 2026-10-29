@@ -42,10 +42,23 @@ The protected ranges include the platform aggregate, `host_address/32`, all conf
 | `connections` | Adds an outgoing allow on `from` and an incoming allow on `to`, restricted to the other guest's `/32`, protocol, and destination port. Both names must identify declared guests. Each exception permits that specific direction of connection initiation. |
 | `bootstrap = true` | On that guest only, allows incoming TCP 22 from each IPv4 `/32` in `bootstrap_admin_cidrs`, before protected-source blocks. Available to every role and defaults to `false`. Set it back to `false` and apply after setup to remove the exception. Guest bootstrap works independently of `manage_host_firewall`. |
 | `public_ports` | Allows incoming TCP/UDP on each listed destination port from `0.0.0.0/0`, after protected-source blocks. There is no public source-IP allowlist. Ports 22 and 8006 are rejected for every role; `private_proxy` and `management` reject all public ports. Defaults to empty. |
+| `public_ports_lan_cidrs` | Top-level IPv4 subnet list in `home.tfvars`, default `[]`. These LAN sources may reach each VM's declared `public_ports` before protected-source drops. VMs without public ports receive no exception. Subnets must be canonical, narrower than `/0`, and must not overlap `platform_cidr`. |
 | `internet_egress_ports` | Allows outgoing TCP/UDP to IPv4 destinations outside the protected ranges on exactly the listed destination ports. Defaults to `[]`, granting no general internet egress. Applies to every role. Protected-network blocks precede these allowances. |
 | `http_proxy_name` | Optional top-level guest name, default `null`. Every other declared guest, including `service_vpn`, receives outgoing TCP 3128 to that guest, with matching ingress for each client's `/32`. New guests are included automatically. Configure the proxy guest's internet egress separately. |
 
 Example VPN listener declarations use UDP 51820 and 51821; those ports are inventory choices, not automatic role defaults. EdgeRouter forwarding and a listening VPN service are separate requirements. Likewise, `public_proxy` does not automatically open TCP 80/443.
+
+### LAN access to public ports
+
+Set this once at the top level of `home.tfvars` to permit the chosen LAN subnets to reach all declared public services:
+
+```hcl
+public_ports_lan_cidrs = ["192.168.100.0/24"]
+```
+
+For example, if `vpn-admin.public_ports` declares UDP 51821, the chosen LAN can reach that port. A public proxy declaring TCP 80/443 receives those same LAN allowances. All other guest ports retain their existing restrictions, and this setting grants no outgoing internet access. Bootstrap SSH continues to use `bootstrap_admin_cidrs` separately.
+
+The EdgeRouter's aggregate route provides direct guest-IP reachability. Access through the router's public endpoint from the LAN also requires appropriate hairpin NAT. If hairpin NAT changes the source to the router's LAN IP, that address must fall inside an allowed subnet. Set the list back to `[]` and apply to remove the LAN public-port exceptions.
 
 ### Outbound internet ports
 
@@ -76,9 +89,10 @@ Rules are generated in this order, with the default DROP policy handling anythin
 1. Drop IPv6 incoming and outgoing.
 2. Allow enabled bootstrap SSH, declared dependencies, and role-generated dependencies, including admin VPN management access.
 3. Allow approved DNS and NTP destinations.
-4. Drop protected IPv4 sources and destinations.
-5. Allow configured incoming public ports.
-6. Allow explicitly configured outgoing internet destination ports.
+4. Allow configured LAN sources to reach declared public ports.
+5. Drop protected IPv4 sources and destinations.
+6. Allow configured incoming public ports from remaining sources.
+7. Allow explicitly configured outgoing internet destination ports.
 
 This order permits narrow private-network dependencies while keeping the public-port and HTTP/HTTPS allowances from granting general LAN or guest-network access.
 

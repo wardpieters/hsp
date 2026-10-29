@@ -16,28 +16,34 @@ variable "protected_cidrs" { type = list(string) }
 variable "dns_servers" { type = list(string) }
 variable "ntp_servers" { type = list(string) }
 variable "ssh_public_keys" { type = list(string) }
+variable "public_ports_lan_cidrs" {
+  type     = list(string)
+  default  = []
+  nullable = false
+}
 
 module "vm" {
-  source                = "../vm"
-  name                  = var.guest.name
-  node_name             = var.node_name
-  vm_id                 = var.guest.vm_id
-  template_id           = var.guest.template_id
-  datastore_id          = var.guest.datastore_id
-  network               = var.network
-  started               = var.guest.started
-  on_boot               = var.guest.on_boot
-  cores                 = var.guest.cores
-  memory_mb             = var.guest.memory_mb
-  disk_gb               = var.guest.disk_gb
-  backup                = var.guest.backup
-  protected_cidrs       = var.protected_cidrs
-  dns_servers           = var.dns_servers
-  ntp_servers           = var.ntp_servers
-  ssh_public_keys       = var.ssh_public_keys
-  internet_egress_ports = var.guest.internet_egress_ports
-  public_ports          = var.guest.public_ports
-  allow_rules           = var.guest.allow_rules
+  source                 = "../vm"
+  name                   = var.guest.name
+  node_name              = var.node_name
+  vm_id                  = var.guest.vm_id
+  template_id            = var.guest.template_id
+  datastore_id           = var.guest.datastore_id
+  network                = var.network
+  started                = var.guest.started
+  on_boot                = var.guest.on_boot
+  cores                  = var.guest.cores
+  memory_mb              = var.guest.memory_mb
+  disk_gb                = var.guest.disk_gb
+  backup                 = var.guest.backup
+  protected_cidrs        = var.protected_cidrs
+  dns_servers            = var.dns_servers
+  ntp_servers            = var.ntp_servers
+  ssh_public_keys        = var.ssh_public_keys
+  internet_egress_ports  = var.guest.internet_egress_ports
+  public_ports           = var.guest.public_ports
+  public_ports_lan_cidrs = var.public_ports_lan_cidrs
+  allow_rules            = var.guest.allow_rules
 }
 module "dns" {
   source  = "../dns_records"

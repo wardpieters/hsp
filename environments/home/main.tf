@@ -16,14 +16,15 @@ module "network" {
   networks        = { for name, g in var.guests : name => { slot = g.slot, vnet_id = g.vnet_id } }
 }
 module "service" {
-  for_each        = var.guests
-  source          = "../../modules/service_vm"
-  node_name       = var.node_name
-  network         = module.network.networks[each.key]
-  protected_cidrs = concat([var.platform_cidr, "${var.host_address}/32"], var.protected_cidrs)
-  dns_servers     = var.dns_servers
-  ntp_servers     = var.ntp_servers
-  ssh_public_keys = var.ssh_public_keys
+  for_each               = var.guests
+  source                 = "../../modules/service_vm"
+  node_name              = var.node_name
+  network                = module.network.networks[each.key]
+  protected_cidrs        = concat([var.platform_cidr, "${var.host_address}/32"], var.protected_cidrs)
+  dns_servers            = var.dns_servers
+  ntp_servers            = var.ntp_servers
+  ssh_public_keys        = var.ssh_public_keys
+  public_ports_lan_cidrs = var.public_ports_lan_cidrs
   guest = {
     name                  = each.key, vm_id = each.value.vm_id, template_id = var.template_id, datastore_id = var.datastore_id,
     started               = each.value.started, on_boot = each.value.on_boot, cores = each.value.cores,

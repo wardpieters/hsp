@@ -44,8 +44,34 @@ run "stopped_and_isolated" {
     error_message = "Guests must have no internet egress by default, including when public ingress is enabled."
   }
   assert {
+    condition     = length([for r in output.rules : r if r.type == "in" && r.action == "ACCEPT" && r.source == "192.168.1.0/24"]) == 0
+    error_message = "Public ports must remain closed to the LAN unless its subnet is explicitly allowed."
+  }
+  assert {
     condition     = index([for r in output.rules : r.comment], "hsp:allow:private proxy") < index([for r in output.rules : r.comment], "hsp:protect-in:10.77.0.0/24")
     error_message = "Explicit dependencies must be usable before the default platform block."
+  }
+}
+run "lan_access_to_public_ports" {
+  command = plan
+  variables {
+    public_ports_lan_cidrs = ["192.168.1.0/24", "100.64.5.0/24"]
+    public_ports           = [{ protocol = "tcp", port = 443 }, { protocol = "udp", port = 51821 }]
+  }
+  assert {
+    condition = toset([for r in output.rules : "${r.type}:${r.action}:${r.source}:${r.proto}:${r.dport}" if contains(["192.168.1.0/24", "100.64.5.0/24"], coalesce(r.source, "-")) && r.action == "ACCEPT"]) == toset([
+      "in:ACCEPT:192.168.1.0/24:tcp:443", "in:ACCEPT:192.168.1.0/24:udp:51821",
+      "in:ACCEPT:100.64.5.0/24:tcp:443", "in:ACCEPT:100.64.5.0/24:udp:51821"
+    ])
+    error_message = "Each selected LAN subnet must receive only the VM's declared TCP/UDP public ports."
+  }
+  assert {
+    condition     = alltrue([for i, r in output.rules : i < index([for rule in output.rules : rule.comment], "hsp:protect-in:192.168.1.0/24") if r.action == "ACCEPT" && contains(["192.168.1.0/24", "100.64.5.0/24"], coalesce(r.source, "-"))])
+    error_message = "LAN public-port exceptions must precede protected-source drops."
+  }
+  assert {
+    condition     = length([for r in output.rules : r if r.type == "out" && r.action == "ACCEPT" && r.dest == "0.0.0.0/0"]) == 0
+    error_message = "Allowing LAN clients must not grant outbound internet access."
   }
 }
 run "explicit_internet_egress_ports" {
@@ -74,6 +100,16 @@ run "reject_public_ssh" {
   command = plan
   variables { public_ports = [{ protocol = "tcp", port = 22 }] }
   expect_failures = [var.public_ports]
+}
+run "reject_public_ports_lan_default_route" {
+  command = plan
+  variables { public_ports_lan_cidrs = ["0.0.0.0/0"] }
+  expect_failures = [var.public_ports_lan_cidrs]
+}
+run "reject_public_ports_lan_ipv6" {
+  command = plan
+  variables { public_ports_lan_cidrs = ["fd00::/64"] }
+  expect_failures = [var.public_ports_lan_cidrs]
 }
 run "reject_internet_egress_protocol" {
   command = plan
