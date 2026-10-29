@@ -20,7 +20,7 @@ VPN/proxy software, user authentication, TLS, DNS aliases, and reverse proxy hos
 ## Shared rules for every role
 
 - Incoming and outgoing default policies are `DROP`.
-- The VM NIC firewall is enabled, MAC filtering is enabled, and `ipfilter-net0` permits the guest's assigned IPv4 `/32` as its source address.
+- The VM NIC firewall is enabled, MAC filtering is enabled, and `ipfilter-net0` permits only the guest's assigned IPv4 address as its source. The entry uses a bare IP, equivalent to `/32`, because Proxmox removes `/32` on read-back; matching that form avoids unnecessary IP-set replacements.
 - Incoming and outgoing IPv6 are explicitly dropped. DHCP, NDP, and router advertisement allowances are disabled.
 - Outgoing DNS to each `dns_servers` IP is allowed on TCP and UDP 53, regardless of `allow_updates`.
 - Outgoing NTP to each `ntp_servers` IP is allowed on UDP 123, regardless of `allow_updates`.

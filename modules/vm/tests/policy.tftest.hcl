@@ -25,8 +25,8 @@ run "stopped_and_isolated" {
     error_message = "Filtering must be enabled and fail closed."
   }
   assert {
-    condition     = proxmox_virtual_environment_firewall_ipset.this.cidr[0].name == "10.77.0.2/32"
-    error_message = "A VM must not impersonate its gateway or another VM."
+    condition     = length(proxmox_virtual_environment_firewall_ipset.this.cidr) == 1 && proxmox_virtual_environment_firewall_ipset.this.cidr[0].name == "10.77.0.2"
+    error_message = "Allow exactly the assigned host IP using Proxmox's canonical bare-address form to avoid /32 replacement drift."
   }
   assert {
     condition     = output.rules[0].action == "DROP" && output.rules[0].source == "::/0" && output.rules[1].dest == "::/0"

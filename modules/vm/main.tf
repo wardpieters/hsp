@@ -53,7 +53,9 @@ resource "proxmox_virtual_environment_firewall_ipset" "this" {
   node_name = var.node_name
   vm_id     = proxmox_virtual_environment_vm.this.vm_id
   name      = "ipfilter-net0"
-  cidr { name = "${var.network.address}/32" }
+  # Proxmox returns single IPv4 hosts without /32. Match that canonical form
+  # so the provider does not replace an otherwise unchanged anti-spoofing set.
+  cidr { name = var.network.address }
 }
 resource "proxmox_virtual_environment_firewall_options" "this" {
   node_name     = var.node_name
