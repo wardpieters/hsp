@@ -5,16 +5,15 @@ terraform {
   }
 }
 variable "proxmox_ssh" {
-  type = object({ host = string, user = string, host_key = string })
+  type = object({ host = string, user = string })
 }
 variable "platform_cidr" { type = string }
 provider "system" {
   alias = "proxmox"
   ssh {
-    host     = var.proxmox_ssh.host
-    user     = var.proxmox_ssh.user
-    host_key = var.proxmox_ssh.host_key
-    agent    = true
+    host  = var.proxmox_ssh.host
+    user  = var.proxmox_ssh.user
+    agent = true
   }
   sudo = true
 }

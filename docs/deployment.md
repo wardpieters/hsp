@@ -13,7 +13,7 @@ Use trusted HTTPS certificates for both APIs, a dedicated Proxmox API identity, 
 - `PROXMOX_VE_API_TOKEN`: the provider's `user@realm!tokenid=secret` credential.
 - `TF_VAR_pihole_password`: the Pi-hole API credential.
 
-Proxmox host routing uses SSH with independently verified host keys, an SSH agent, and elevated file/service access. Pi-hole DNS uses only its API; no Pi-hole SSH credentials or host files are required.
+Proxmox host routing uses SSH agent authentication and elevated file/service access. SSH host-key verification is disabled. Pi-hole DNS uses only its API; no Pi-hole SSH credentials or host files are required.
 
 ## Configure and initialize
 
@@ -25,7 +25,7 @@ make init
 make check
 ```
 
-Replace every illustrative address, ID, SSH key, template, datastore, NTP target, and host key. Both environments use separate state. Keep state and plans on an encrypted, backed-up workstation. Sensitive Terraform values still appear in state and saved plans. Run only one writer against Pi-hole and use `-parallelism=1` for the home environment.
+Replace every illustrative address, ID, SSH key, template, datastore, and NTP target. Both environments use separate state. Keep state and plans on an encrypted, backed-up workstation. Sensitive Terraform values still appear in state and saved plans. Run only one writer against Pi-hole and use `-parallelism=1` for the home environment.
 
 Leave new guests `started = false` and `on_boot = false`. Set `manage_host_firewall = true` only after reviewing/importing the existing full node rule list and datacenter/node settings: Terraform will own those resources. Otherwise establish equivalent host protection separately. The generated policy is visible through `terraform output host_policy`. Preserve the bootstrap administrator `/32` until admin VPN access works.
 

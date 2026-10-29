@@ -1,5 +1,4 @@
-# SSH host keys must be verified independently; do not blindly trust ssh-keyscan.
 proxmox_ssh = {
-  host = "192.168.50.10", user = "terraform", host_key = "REPLACE_WITH_VERIFIED_SSH_HOST_PUBLIC_KEY"
+  host = "192.168.50.10", user = "terraform"
 }
 platform_cidr = "10.77.0.0/24"
