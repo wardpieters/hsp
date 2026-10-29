@@ -6,7 +6,7 @@ provider "proxmox" {
 provider "pihole" {
   url          = var.pihole_url
   password     = var.pihole_password
-  insecure_tls = false
+  insecure_tls = var.pihole_insecure_tls
 }
 module "network" {
   source          = "../../modules/platform_network"

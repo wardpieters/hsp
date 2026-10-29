@@ -9,8 +9,13 @@ variable "pihole_url" {
   type = string
   validation {
     condition     = can(regex("^https://[^/@?#]+/?$", var.pihole_url))
-    error_message = "Use Pi-hole's trusted HTTPS endpoint."
+    error_message = "Use Pi-hole's HTTPS endpoint."
   }
+}
+variable "pihole_insecure_tls" {
+  description = "Skip TLS certificate verification for the Pi-hole API."
+  type        = bool
+  default     = false
 }
 variable "pihole_password" {
   type      = string
