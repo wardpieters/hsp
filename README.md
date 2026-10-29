@@ -4,6 +4,8 @@ Terraform configuration for one Proxmox VE 9.x node and Pi-hole v6. Each VM gets
 
 Declare a guest once in [the home inventory](environments/home/home.tfvars.example). Its DNS aliases can resolve directly to the guest or to a selected reverse proxy. Separate admin and family VPN roles generate different access rules.
 
+See the [role and firewall reference](docs/firewall-roles.md) for every role's automatic permissions, shared defaults, rule order, and configurable exceptions.
+
 For example, inside a guest declaration:
 
 ```hcl
