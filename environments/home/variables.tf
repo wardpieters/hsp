@@ -74,6 +74,7 @@ variable "guests" {
     vm_id         = number, slot = number, vnet_id = string, role = optional(string, "workload"),
     started       = optional(bool, false), on_boot = optional(bool, false),
     cores         = optional(number, 2), memory_mb = optional(number, 2048), disk_gb = optional(number, 16),
+    backup        = optional(bool, true),
     allow_updates = optional(bool, false),
     public_ports  = optional(list(object({ protocol = string, port = number })), []),
     dns           = optional(map(object({ mode = string, proxy_name = optional(string), proxy_address = optional(string) })), {})

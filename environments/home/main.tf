@@ -28,6 +28,7 @@ module "service" {
     name         = each.key, vm_id = each.value.vm_id, template_id = var.template_id, datastore_id = var.datastore_id,
     started      = each.value.started, on_boot = each.value.on_boot, cores = each.value.cores,
     memory_mb    = each.value.memory_mb, disk_gb = each.value.disk_gb, allow_updates = each.value.allow_updates,
+    backup       = each.value.backup,
     public_ports = each.value.public_ports, allow_rules = local.allow_rules[each.key],
     dns          = { for d in local.dns_entries : d.name => { mode = d.mode, proxy_address = d.proxy_address } if d.guest == each.key }
   }

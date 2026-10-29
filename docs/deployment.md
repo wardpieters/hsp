@@ -2,7 +2,7 @@
 
 The [role and firewall reference](firewall-roles.md) lists all guest roles, automatic permissions, shared rules, and the effects of `public_ports`, `connections`, and `allow_updates`.
 
-The VM module currently sets `backup = false` on each managed `scsi0` disk, excluding those disks from Proxmox backups. Backup-job schedules and any separate configuration-only backups are managed outside this configuration.
+Each guest accepts `backup` in `home.tfvars`, defaulting to `true`. Set `backup = false` inside a guest's entry to exclude its managed `scsi0` disk from Proxmox backups. Backup-job schedules and any separate configuration-only backups are managed outside this configuration.
 
 ## Prerequisites
 

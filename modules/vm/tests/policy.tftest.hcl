@@ -17,6 +17,10 @@ variables {
 run "stopped_and_isolated" {
   command = plan
   assert {
+    condition     = proxmox_virtual_environment_vm.this.disk[0].backup
+    error_message = "VM disks must be included in backups by default."
+  }
+  assert {
     condition     = !proxmox_virtual_environment_vm.this.started && !proxmox_virtual_environment_vm.this.on_boot && proxmox_virtual_environment_vm.this.network_device[0].firewall
     error_message = "New guests must remain stopped with NIC enforcement enabled."
   }
@@ -39,6 +43,14 @@ run "stopped_and_isolated" {
   assert {
     condition     = index([for r in output.rules : r.comment], "hsp:allow:private proxy") < index([for r in output.rules : r.comment], "hsp:protect-in:10.77.0.0/24")
     error_message = "Explicit dependencies must be usable before the default platform block."
+  }
+}
+run "backup_disabled" {
+  command = plan
+  variables { backup = false }
+  assert {
+    condition     = !proxmox_virtual_environment_vm.this.disk[0].backup
+    error_message = "A VM can explicitly exclude its managed disk from backups."
   }
 }
 run "reject_public_ssh" {

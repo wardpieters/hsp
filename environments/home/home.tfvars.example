@@ -18,6 +18,7 @@ ssh_public_keys     = ["REPLACE_WITH_YOUR_SSH_PUBLIC_KEY"]
 private_proxy_name  = "proxy-private"
 
 # New guests start stopped, without autostart. Configure VPN/proxy software later.
+# Each guest defaults to backup = true; set backup = false to exclude its disk.
 guests = {
   vpn-admin = {
     vm_id = 1000, slot = 0, vnet_id = "hsp110", role = "admin_vpn"

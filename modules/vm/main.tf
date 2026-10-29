@@ -19,7 +19,7 @@ resource "proxmox_virtual_environment_vm" "this" {
     datastore_id = var.datastore_id
     size         = var.disk_gb
     discard      = "on"
-    backup       = false
+    backup       = var.backup
   }
   agent {
     enabled = true

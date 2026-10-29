@@ -42,6 +42,11 @@ variable "disk_gb" {
   type    = number
   default = 16
 }
+variable "backup" {
+  description = "Include the managed VM disk in Proxmox backups."
+  type        = bool
+  default     = true
+}
 variable "ssh_public_keys" {
   type = list(string)
   validation {

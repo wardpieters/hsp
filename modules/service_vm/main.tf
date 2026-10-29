@@ -3,6 +3,7 @@ variable "guest" {
     name         = string, vm_id = number, template_id = number, datastore_id = string,
     started      = optional(bool, false), on_boot = optional(bool, false), cores = optional(number, 2),
     memory_mb    = optional(number, 2048), disk_gb = optional(number, 16), allow_updates = optional(bool, false),
+    backup       = optional(bool, true),
     public_ports = optional(list(object({ protocol = string, port = number })), []),
     allow_rules  = optional(list(object({ direction = string, address = string, protocol = string, ports = string, description = string })), []),
     dns          = optional(map(object({ mode = string, proxy_address = optional(string) })), {})
@@ -28,6 +29,7 @@ module "vm" {
   cores           = var.guest.cores
   memory_mb       = var.guest.memory_mb
   disk_gb         = var.guest.disk_gb
+  backup          = var.guest.backup
   protected_cidrs = var.protected_cidrs
   dns_servers     = var.dns_servers
   ntp_servers     = var.ntp_servers
