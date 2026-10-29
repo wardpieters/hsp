@@ -6,6 +6,8 @@ Each guest accepts `backup` in `home.tfvars`, defaulting to `true`. Set `backup 
 
 Each guest's `internet_egress_ports` defaults to `[]`. Declare individual TCP/UDP destination ports when a VM needs internet access, including access to package repositories. Replace the former `allow_updates` flag with this explicit list. Approved DNS/NTP, declared internal dependencies, and replies to permitted inbound connections remain available independently. See the [outbound port examples](firewall-roles.md#outbound-internet-ports).
 
+The optional top-level `http_proxy_name` selects a shared HTTP forward proxy. The example's `http-proxy` VM has outbound TCP 80/443, and every other declared VM receives TCP 3128 access to it. Install Squid after provisioning and configure clients to use its proxy URL; see the [shared proxy reference](firewall-roles.md#shared-http-forward-proxy).
+
 ## Prerequisites
 
 Record the real node name, VE patch version/firewall backend, host LAN IP, bridges, protected LAN/VPN ranges, storage, and an unused private platform range. Use the same aggregate in both environments. A `/24` holds 64 `/30` guest networks. Keep explicit slots and VM/VNet IDs stable when adding or deleting guests.

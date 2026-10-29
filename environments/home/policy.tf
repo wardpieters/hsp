@@ -6,7 +6,10 @@ locals {
     } if name != admin]]),
     [for name, g in var.guests : {
       from = name, to = var.private_proxy_name, protocol = "tcp", port = 443
-    } if g.role == "service_vpn" && var.private_proxy_name != null]
+    } if g.role == "service_vpn" && var.private_proxy_name != null],
+    [for name in keys(var.guests) : {
+      from = name, to = var.http_proxy_name, protocol = "tcp", port = 3128
+    } if name != var.http_proxy_name && contains(keys(var.guests), coalesce(var.http_proxy_name, "-"))]
   )
   connections = distinct(concat(var.connections, local.role_connections))
   allow_rules = { for name, g in var.guests : name => concat(

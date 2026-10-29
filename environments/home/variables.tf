@@ -62,6 +62,15 @@ variable "ntp_servers" { type = list(string) }
 variable "template_id" { type = number }
 variable "datastore_id" { type = string }
 variable "ssh_public_keys" { type = list(string) }
+variable "http_proxy_name" {
+  description = "Optional HTTP forward-proxy guest that every other guest may reach on TCP 3128."
+  type        = string
+  default     = null
+  validation {
+    condition     = var.http_proxy_name == null ? true : contains(keys(var.guests), var.http_proxy_name)
+    error_message = "http_proxy_name must name a declared guest or be null."
+  }
+}
 variable "private_proxy_name" {
   type    = string
   default = null
@@ -108,7 +117,9 @@ variable "connections" {
     condition = alltrue([for c in var.connections : try(
       c.from != c.to && contains(keys(var.guests), c.from) && contains(keys(var.guests), c.to) &&
       contains(["tcp", "udp"], c.protocol) && c.port >= 1 && c.port <= 65535 && floor(c.port) == c.port &&
-    (var.guests[c.from].role != "service_vpn" || (c.to == var.private_proxy_name && c.protocol == "tcp" && c.port == 443)), false)])
-    error_message = "Connections require existing distinct peers and numeric ports; the service VPN may reach only its private proxy over TCP 443."
+      (var.guests[c.from].role != "service_vpn" ||
+        (c.to == var.private_proxy_name && c.protocol == "tcp" && c.port == 443) ||
+    (c.to == var.http_proxy_name && c.protocol == "tcp" && c.port == 3128)), false)])
+    error_message = "Connections require existing distinct peers and numeric ports; the service VPN may reach only its private proxy over TCP 443 and the selected HTTP proxy over TCP 3128."
   }
 }

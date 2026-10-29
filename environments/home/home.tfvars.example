@@ -16,6 +16,7 @@ template_id         = 9000
 datastore_id        = "local-lvm"
 ssh_public_keys     = ["REPLACE_WITH_YOUR_SSH_PUBLIC_KEY"]
 private_proxy_name  = "proxy-private"
+http_proxy_name     = "http-proxy" # Every other guest may reach this VM on TCP 3128.
 
 # New guests start stopped, without autostart. Configure VPN/proxy software later.
 # Each guest defaults to backup = true; set backup = false to exclude its disk.
@@ -50,6 +51,15 @@ guests = {
     vm_id = 1005, slot = 5, vnet_id = "hsp115"
     dns = { web = { mode = "proxy", proxy_name = "proxy-public" } }
     internet_egress_ports = []
+  }
+  http-proxy = {
+    vm_id = 1006, slot = 6, vnet_id = "hsp1006"
+    backup = false
+    public_ports = []
+    internet_egress_ports = [{ protocol = "tcp", port = 80 }, { protocol = "tcp", port = 443 }]
+    dns = { http-proxy = { mode = "direct" } }
+    cores = 1
+    memory_mb = 512
   }
 }
 connections = [
