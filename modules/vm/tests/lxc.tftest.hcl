@@ -29,6 +29,28 @@ run "managed_mount_volumes" {
     error_message = "Mount order, size, container path, default/override storage and per-mount backup flags must be preserved."
   }
 }
+run "mount_sizes_match_proxmox_readback" {
+  command = plan
+  variables {
+    mount_points = [
+      { path = "/gib", size_gb = 32 },
+      { path = "/below-tib", size_gb = 1023 },
+      { path = "/tib", size_gb = 1024 },
+      { path = "/nonintegral-tib", size_gb = 1536 },
+      { path = "/three-tib", size_gb = 3072 },
+      { path = "/above-three-tib", size_gb = 3073 },
+      { path = "/large", size_gb = 1048576 },
+    ]
+  }
+  assert {
+    condition     = [for m in proxmox_virtual_environment_container.this[0].mount_point : m.size] == ["32G", "1023G", "1T", "1536G", "3T", "3073G", "1024T"]
+    error_message = "Mount sizes must match Proxmox's exact-unit read-back without rounding or changing capacity."
+  }
+  assert {
+    condition     = alltrue([for m in proxmox_virtual_environment_container.this[0].mount_point : try(length(m.mount_options) == 0, false)])
+    error_message = "Unconfigured mount options must match Proxmox's empty-list read-back."
+  }
+}
 run "reject_mount_on_vm" {
   command = plan
   variables {

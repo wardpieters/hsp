@@ -22,9 +22,11 @@ resource "proxmox_virtual_environment_container" "this" {
     for_each = var.mount_points
     content {
       volume = mount_point.value.datastore_id == null ? var.datastore_id : mount_point.value.datastore_id
-      size   = "${mount_point.value.size_gb}G"
-      path   = mount_point.value.path
-      backup = mount_point.value.backup
+      # Match Proxmox's exact-unit read-back: the provider replaces mounts on string size differences.
+      size          = mount_point.value.size_gb % 1024 == 0 ? "${mount_point.value.size_gb / 1024}T" : "${mount_point.value.size_gb}G"
+      mount_options = []
+      path          = mount_point.value.path
+      backup        = mount_point.value.backup
     }
   }
   features {
