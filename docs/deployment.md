@@ -82,6 +82,16 @@ Each mount's `backup` defaults to `true`, overriding the provider's false defaul
 
 Containers are unprivileged. Set `nesting = true` inside an LXC guest's entry to enable Proxmox `nesting=1`; it defaults to `false` and is rejected on VMs. FUSE, keyctl and mknod remain disabled. Containers share the host kernel, so their host isolation differs from a VM even though network policy is shared. Enabling nesting does not install or configure application/container software; host devices and custom ID maps are outside this module. The supplied SSH keys are installed for `root`, rather than creating the VM's `ward` user. Use `ssh root@<container-IP>` when an SSH server is available, or bootstrap through the Proxmox console. New containers stay stopped without autostart until inspected and explicitly activated.
 
+If an existing container update fails with `changing feature flags (except nesting) is only allowed for root@pam`, the pinned provider has a feature-update limitation: it sends explicit `fuse=0,keyctl=0,mknod=0` alongside nesting, even when only nesting changes. Proxmox distinguishes omitted flags from explicit zeros during its permission check. Removing the false settings from HCL does not help because the provider supplies defaults. See the [provider update implementation](https://github.com/bpg/terraform-provider-proxmox/blob/v0.118.1/proxmoxtf/resource/container/container.go#L2551-L2623) and [Proxmox permission check](https://github.com/proxmox/pve-container/blob/master/src/PVE/LXC.pm).
+
+For a container configured with `nesting = true`, record this module's intended flags once from a root shell on the Proxmox host, replacing `1009` with the affected CT ID:
+
+```sh
+pct set 1009 --features nesting=1,fuse=0,keyctl=0,mknod=0
+```
+
+Use `nesting=0` instead when the guest's tfvars setting is false. This explicitly disables the other flags; it does not change disks or network policy. If Proxmox shows pending feature changes, restart that container during an appropriate maintenance window so the active configuration matches. Then generate a fresh Terraform plan before applying; do not reuse the failed saved plan. Recording the explicit zeros also allows subsequent nesting changes without introducing those flags through the API. Continue using the normal Terraform API token; granting more ACL privileges does not bypass this root-only check.
+
 For existing deployments, rename `template_id` to `vm_template_id` in your private tfvars. A `moved` block migrates the existing VM resource address to its new `[0]` index without recreating it; existing network, firewall and DNS resource addresses remain. Inspect the plan for moves rather than replacements. Changing an existing entry's `type` does not convert its filesystem: create a new guest with a new ID/slot and migrate the workload/data separately. Changing a template can require replacement.
 
 ## Apply Proxmox host routing
