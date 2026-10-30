@@ -43,7 +43,7 @@ The protected ranges include the platform aggregate, `host_address/32`, all conf
 | `bootstrap = true` | On that guest only, allows incoming TCP 22 from each IPv4 `/32` in `bootstrap_admin_cidrs`, before protected-source blocks. Available to every role and defaults to `false`. Set it back to `false` and apply after setup to remove the exception. Guest bootstrap works independently of `manage_host_firewall`. |
 | `public_ports` | Allows incoming TCP/UDP on each listed destination port from `0.0.0.0/0`, after protected-source blocks. There is no public source-IP allowlist. Ports 22 and 8006 are rejected for every role; `private_proxy` and `management` reject all public ports. Defaults to empty. |
 | `public_ports_lan_cidrs` | Top-level IPv4 subnet list in `home.tfvars`, default `[]`. These LAN sources may reach each VM's declared `public_ports` before protected-source drops. VMs without public ports receive no exception. Subnets must be canonical, narrower than `/0`, and must not overlap `platform_cidr`. |
-| `internet_egress_ports` | Allows outgoing TCP/UDP to IPv4 destinations outside the protected ranges on exactly the listed destination ports. Defaults to `[]`, granting no general internet egress. Applies to every role. Protected-network blocks precede these allowances. |
+| `internet_egress_ports` | The top-level list applies to every VM; each guest's list adds its own ports. Lists are combined and duplicate protocol/port pairs removed. Both default to `[]`. Outgoing TCP/UDP is allowed only on those destination ports and to IPv4 addresses outside protected ranges. Protected-network blocks precede these allowances. |
 | `http_proxy_name` | Optional top-level guest name, default `null`. Every other declared guest, including `service_vpn`, receives outgoing TCP 3128 to that guest, with matching ingress for each client's `/32`. New guests are included automatically. Configure the proxy guest's internet egress separately. |
 
 Example VPN listener declarations use UDP 51820 and 51821; those ports are inventory choices, not automatic role defaults. EdgeRouter forwarding and a listening VPN service are separate requirements. Likewise, `public_proxy` does not automatically open TCP 80/443.
@@ -78,7 +78,7 @@ The EdgeRouter's aggregate route provides direct guest-IP reachability. Access t
 
 ### Outbound internet ports
 
-Inside each guest's entry, leave `internet_egress_ports = []` to block new general internet connections, or explicitly allow selected ports. For example, this permits HTTPS egress while leaving HTTP blocked:
+Set top-level `internet_egress_ports` in `home.tfvars` for ports shared by every VM. Each guest's `internet_egress_ports` adds ports for that VM. An empty guest list still inherits the global list. For example, add HTTPS for one guest by setting this inside its entry:
 
 ```hcl
 internet_egress_ports = [
@@ -88,11 +88,24 @@ internet_egress_ports = [
 
 Each entry accepts `tcp` or `udp` and an integer port from 1 to 65535. Allowed destinations cover IPv4 addresses outside the protected ranges; these rules do not restrict access to specific websites or package repositories. IPv6 remains blocked. The former `allow_updates` flag has been replaced by this list; there is no automatic TCP 80/443 allowance.
 
-An empty list preserves replies to permitted inbound connections, approved DNS/NTP targets, and declared guest/IP dependencies. `public_ports` controls incoming services separately. DNS and NTP targets remain allowed even if you configure external resolver or time-server addresses.
+With both lists empty, replies to permitted inbound connections, approved DNS/NTP targets, and declared guest/IP dependencies remain allowed. `public_ports` controls incoming services separately. DNS and NTP targets remain allowed even if you configure external resolver or time-server addresses.
+
+### NTP pools
+
+For Debian's NTP pool, allow UDP destination port 123 globally instead of pinning pool server IPs. Pool DNS answers change over time; see the [NTP Pool usage guide](https://www.ntppool.org/en/use.html). Set these top-level values in `home.tfvars`:
+
+```hcl
+ntp_servers = []
+internet_egress_ports = [
+  { protocol = "udp", port = 123 },
+]
+```
+
+`ntp_servers` controls fixed-IP firewall exceptions; an empty list removes those exceptions. The global UDP 123 entry allows every VM to reach public IPv4 NTP servers after protected-network drops. Replies are statefully permitted without a public inbound port. The Debian pool hostnames remain configured in the guests' time-sync service; Terraform does not configure that service or resolve the pool into a static allowlist.
 
 ### Shared HTTP forward proxy
 
-Set the top-level `http_proxy_name = "http-proxy"` to select a declared guest. The inventory example gives that guest VM ID 1006, slot 6 (`10.77.0.26`), a direct `http-proxy.home.ward.nl` DNS record, and outbound TCP 80/443. Its `public_ports` is empty. Other guests retain empty direct internet egress lists and can use `http://http-proxy.home.ward.nl:3128` after Squid and their proxy settings are configured.
+Set the top-level `http_proxy_name = "http-proxy"` to select a declared guest. The inventory example gives that guest VM ID 1006, slot 6 (`10.77.0.26`), a direct `http-proxy.home.ward.nl` DNS record, and its own outbound TCP 80/443 allowance. Its `public_ports` is empty. All guests inherit global UDP 123 for NTP; other guests have empty per-VM egress lists and can use `http://http-proxy.home.ward.nl:3128` for web requests after Squid and their proxy settings are configured.
 
 This grants proxied web access to all declared guests, including the family VPN VM. Squid must listen on TCP 3128 and apply appropriate client and destination ACLs. Terraform provisions the VM and firewall/DNS rules; install Squid and configure proxy use inside clients separately. Access to the proxy is explicit HTTP proxying, rather than automatic redirection of all guest traffic. Proxmox blocks the proxy's connections to protected destinations except declared dependencies and narrow infrastructure exceptions. An IP dependency from `http-proxy` also allows Squid to relay matching requests for its clients, subject to its ACLs.
 

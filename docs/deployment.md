@@ -4,7 +4,7 @@ The [role and firewall reference](firewall-roles.md) lists all guest roles, auto
 
 Each guest accepts `backup` in `home.tfvars`, defaulting to `true`. Set `backup = false` inside a guest's entry to exclude its managed `scsi0` disk from Proxmox backups. Backup-job schedules and any separate configuration-only backups are managed outside this configuration.
 
-Each guest's `internet_egress_ports` defaults to `[]`. Declare individual TCP/UDP destination ports when a VM needs internet access, including access to package repositories. Replace the former `allow_updates` flag with this explicit list. Approved DNS/NTP, declared internal dependencies, and replies to permitted inbound connections remain available independently. See the [outbound port examples](firewall-roles.md#outbound-internet-ports).
+Top-level `internet_egress_ports` applies to every VM and is combined with each guest's own list; both default to `[]`. Declare shared TCP/UDP destination ports globally and add VM-specific ports inside guest entries. The example allows global UDP 123 for Debian NTP pools and uses `ntp_servers = []` to remove fixed-IP NTP exceptions. Replace the former `allow_updates` flag with explicit egress entries. Approved DNS/NTP, declared dependencies, and replies to permitted inbound connections remain available independently. See the [outbound port examples](firewall-roles.md#outbound-internet-ports).
 
 The optional top-level `http_proxy_name` selects a shared HTTP forward proxy. The example's `http-proxy` VM has outbound TCP 80/443, and every other declared VM receives TCP 3128 access to it. Install Squid after provisioning and configure clients to use its proxy URL; see the [shared proxy reference](firewall-roles.md#shared-http-forward-proxy).
 
@@ -107,7 +107,7 @@ Your workstation's source IP must match an entry in `bootstrap_admin_cidrs`, and
 Before migrating real services, verify:
 
 - Unrelated guests cannot reach each other, host management, gateway management addresses, or LAN services. Test IPv6/link-local traffic and IP/MAC spoofing too.
-- Explicit guest/IP dependencies work only on their declared destination addresses and ports; approved DNS and NTP work. General internet access uses each guest's configured egress ports; with an empty list, only explicit dependencies and infrastructure exceptions remain permitted.
+- Explicit guest/IP dependencies work only on their declared destination addresses and ports; approved DNS and NTP work. General internet access uses the combined global and per-guest egress ports; with both lists empty, only explicit dependencies and infrastructure exceptions remain permitted.
 - Bootstrap adds SSH access only from the listed administrator `/32` addresses. Disabling it removes that exception; other guests retain their existing policies.
 - Only LAN subnets in `public_ports_lan_cidrs` can use the public-port exceptions. Other ports retain their restrictions. Verify effective host rules, including Proxmox's implicit management allowances.
 - An external EdgeRouter-forwarded connection receives replies. Check observed source addresses and SDN SNAT behavior.

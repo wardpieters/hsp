@@ -107,6 +107,43 @@ run "internet_egress_is_per_guest" {
     error_message = "Enabling internet egress for one guest must not enable it for another."
   }
 }
+run "global_and_guest_egress_are_combined" {
+  command = plan
+  variables {
+    ntp_servers           = []
+    internet_egress_ports = [{ protocol = "udp", port = 123 }]
+    guests = {
+      proxy = { vm_id = 100, slot = 0, vnet_id = "hsp100", role = "private_proxy", internet_egress_ports = [{ protocol = "tcp", port = 443 }, { protocol = "udp", port = 123 }] }
+      cloud = { vm_id = 101, slot = 1, vnet_id = "hsp101" }
+    }
+  }
+  assert {
+    condition     = length([for r in output.policies["proxy"] : r if r.type == "out" && r.action == "ACCEPT" && r.dest == "0.0.0.0/0"]) == 2 && toset([for r in output.policies["proxy"] : "${r.proto}:${r.dport}" if r.type == "out" && r.action == "ACCEPT" && r.dest == "0.0.0.0/0"]) == toset(["udp:123", "tcp:443"])
+    error_message = "Global and per-guest egress must be combined without duplicate firewall rules."
+  }
+  assert {
+    condition     = toset([for r in output.policies["cloud"] : "${r.proto}:${r.dport}" if r.type == "out" && r.action == "ACCEPT" && r.dest == "0.0.0.0/0"]) == toset(["udp:123"])
+    error_message = "A guest with no local egress entries must inherit global NTP only, without another guest's HTTPS allowance."
+  }
+  assert {
+    condition     = try(alltrue([for rules in values(output.policies) : index([for r in rules : r.comment], "hsp:internet:udp:123") > index([for r in rules : r.comment], "hsp:protect-out:192.168.1.0/24")]), false)
+    error_message = "Global internet egress must still follow protected-network drops."
+  }
+  assert {
+    condition     = alltrue(flatten([for rules in values(output.policies) : [for r in rules : !(r.type == "out" && r.action == "ACCEPT" && r.dest == "192.168.1.1/32" && r.dport == "123")]]))
+    error_message = "An empty NTP server list must remove the fixed-IP NTP exception when using pool-based internet egress."
+  }
+}
+run "reject_global_egress_protocol" {
+  command = plan
+  variables { internet_egress_ports = [{ protocol = "icmp", port = 123 }] }
+  expect_failures = [var.internet_egress_ports]
+}
+run "reject_global_egress_port" {
+  command = plan
+  variables { internet_egress_ports = [{ protocol = "udp", port = 65536 }] }
+  expect_failures = [var.internet_egress_ports]
+}
 run "shared_http_proxy" {
   command = plan
   variables {

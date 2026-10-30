@@ -12,7 +12,8 @@ bootstrap_admin_cidrs = ["192.168.50.42/32"]
 public_ports_lan_cidrs = ["192.168.50.0/24"] # LAN access to each VM's public_ports; default [].
 manage_host_firewall = false # Opt in only after reviewing/importing existing rules.
 dns_servers         = ["192.168.50.53"]
-ntp_servers         = ["192.168.50.1"] # Must actually provide NTP; replace if it doesn't.
+ntp_servers         = [] # Use the guest's configured NTP pool instead of fixed-IP exceptions.
+internet_egress_ports = [{ protocol = "udp", port = 123 }] # Shared by every VM.
 template_id         = 9000
 datastore_id        = "local-lvm"
 ssh_public_keys     = ["REPLACE_WITH_YOUR_SSH_PUBLIC_KEY"]
@@ -21,7 +22,7 @@ http_proxy_name     = "http-proxy" # Every other guest may reach this VM on TCP 
 
 # New guests start stopped, without autostart. Configure VPN/proxy software later.
 # Each guest defaults to backup = true; set backup = false to exclude its disk.
-# Internet egress defaults to []; opt in per VM, e.g. [{ protocol = "tcp", port = 443 }].
+# Per-VM internet egress adds to the global list, e.g. [{ protocol = "tcp", port = 443 }].
 guests = {
   vpn-admin = {
     vm_id = 1000, slot = 0, vnet_id = "hsp110", role = "admin_vpn"
