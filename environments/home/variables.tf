@@ -1,3 +1,14 @@
+variable "proxmox_api_token" {
+  description = "Shared non-root Proxmox API token (user@realm!tokenid=secret). Supply through TF_VAR_proxmox_api_token."
+  type        = string
+  sensitive   = true
+  ephemeral   = true
+  nullable    = false
+  validation {
+    condition     = can(regex("^[^[:space:]!]+![^[:space:]=]+=[^[:space:]]+$", var.proxmox_api_token))
+    error_message = "Supply a Proxmox API token as user@realm!tokenid=secret through TF_VAR_proxmox_api_token."
+  }
+}
 variable "proxmox_endpoint" {
   type = string
   validation {

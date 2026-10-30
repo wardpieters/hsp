@@ -1,3 +1,9 @@
+mock_provider "restful" {
+  override_during = plan
+  mock_data "restful_resource" {
+    defaults = { output = { features = "" } }
+  }
+}
 mock_provider "proxmox" {}
 variables {
   name            = "files"
@@ -152,12 +158,49 @@ run "lxc_explicit_activation" {
   }
 }
 run "lxc_nesting_is_opt_in" {
-  command = plan
+  command   = apply
+  state_key = "lxc_nesting_is_opt_in"
   variables { nesting = true }
+  assert {
+    condition     = restful_resource.nesting[0].body.features == "nesting=1" && restful_resource.nesting[0].create_method == "PUT" && restful_resource.nesting[0].delete_method == "PUT"
+    error_message = "Nesting must be managed by feature-only REST PUT requests without unrelated flags or container deletion."
+  }
   assert {
     condition     = proxmox_virtual_environment_container.this[0].features[0].nesting && proxmox_virtual_environment_container.this[0].unprivileged && !proxmox_virtual_environment_container.this[0].features[0].keyctl && !proxmox_virtual_environment_container.this[0].features[0].fuse && !proxmox_virtual_environment_container.this[0].features[0].mknod
     error_message = "Opting into nesting must enable only that feature while keeping the container unprivileged."
   }
+}
+run "lxc_nesting_disable_is_explicit" {
+  command   = apply
+  state_key = "lxc_nesting_disable_is_explicit"
+  assert {
+    condition     = restful_resource.nesting[0].body.features == "nesting=0"
+    error_message = "Disabling nesting must send an explicit zero."
+  }
+}
+run "lxc_preserves_explicit_disabled_features" {
+  command   = apply
+  state_key = "lxc_preserves_explicit_disabled_features"
+  variables { nesting = true }
+  override_data {
+    override_during = plan
+    target          = data.restful_resource.container_features[0]
+    values          = { output = { features = "keyctl=0,nesting=0,fuse=0" } }
+  }
+  assert {
+    condition     = restful_resource.nesting[0].body.features == "fuse=0,keyctl=0,nesting=1" && restful_resource.nesting[0].delete_body.features == "fuse=0,keyctl=0,nesting=0"
+    error_message = "Existing disabled flags must be preserved across updates and destruction."
+  }
+}
+run "lxc_rejects_enabled_unrelated_features" {
+  command   = apply
+  state_key = "lxc_rejects_enabled_unrelated_features"
+  override_data {
+    override_during = plan
+    target          = data.restful_resource.container_features[0]
+    values          = { output = { features = "keyctl=1,nesting=0" } }
+  }
+  expect_failures = [restful_resource.nesting]
 }
 run "reject_nesting_on_vm" {
   command = plan

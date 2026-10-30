@@ -1,7 +1,14 @@
 provider "proxmox" {
-  endpoint = var.proxmox_endpoint
-  insecure = var.proxmox_insecure_tls
-  # PROXMOX_VE_API_TOKEN comes from the operator's environment.
+  endpoint  = var.proxmox_endpoint
+  insecure  = var.proxmox_insecure_tls
+  api_token = var.proxmox_api_token
+}
+provider "restful" {
+  base_url = "${trimsuffix(var.proxmox_endpoint, "/")}/api2/json"
+  client   = { tls_insecure_skip_verify = var.proxmox_insecure_tls }
+  security = {
+    apikey = [{ in = "header", name = "Authorization", value = "PVEAPIToken=${var.proxmox_api_token}" }]
+  }
 }
 provider "pihole" {
   url          = var.pihole_url

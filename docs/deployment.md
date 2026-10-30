@@ -20,8 +20,10 @@ Back up Proxmox network/SDN/firewall configuration and Pi-hole configuration. Pr
 
 Use HTTPS endpoints, a dedicated Proxmox API identity, and authorized Pi-hole config-write credentials. Certificate verification defaults to enabled for both APIs. Set `proxmox_insecure_tls = true` or `pihole_insecure_tls = true` in `home.tfvars` to skip verification for the corresponding API. Pi-hole application credentials may require `app_sudo`; review the needed permission explicitly. Supply secrets through your secret manager or shell session:
 
-- `PROXMOX_VE_API_TOKEN`: the provider's `user@realm!tokenid=secret` credential.
+- `TF_VAR_proxmox_api_token`: the shared `user@realm!tokenid=secret` credential for the Proxmox and REST providers. This input is sensitive and ephemeral (Terraform >=1.10), so its value is excluded from resource state and saved plans. The identity and token need `VM.Allocate` on managed LXCs for nesting updates, in addition to their existing guest-management permissions.
 - `TF_VAR_pihole_password`: the Pi-hole API credential.
+
+If your shell setup already exports `PROXMOX_VE_API_TOKEN`, reuse that token with `export TF_VAR_proxmox_api_token="$PROXMOX_VE_API_TOKEN"`. Both providers then use the same credential. Keep this mapping in your existing environment/secret-loading setup; do not add the token to tfvars. Run `make init` after updating to install the additional pinned REST provider.
 
 Proxmox host routing uses SSH agent authentication and elevated file/service access. Root logins run commands directly; other users require installed, passwordless `sudo`. SSH host-key verification is disabled. Pi-hole DNS uses only its API; no Pi-hole SSH credentials or host files are required.
 
@@ -82,21 +84,9 @@ Each mount's `backup` defaults to `true`, overriding the provider's false defaul
 
 Containers are unprivileged. Set `nesting = true` inside an LXC guest's entry to enable Proxmox `nesting=1`; it defaults to `false` and is rejected on VMs. FUSE, keyctl and mknod remain disabled. Containers share the host kernel, so their host isolation differs from a VM even though network policy is shared. Enabling nesting does not install or configure application/container software; host devices and custom ID maps are outside this module. The supplied SSH keys are installed for `root`, rather than creating the VM's `ward` user. Use `ssh root@<container-IP>` when an SSH server is available, or bootstrap through the Proxmox console. New containers stay stopped without autostart until inspected and explicitly activated.
 
-If an existing container update fails with `changing feature flags (except nesting) is only allowed for root@pam`, the pinned provider has a feature-update limitation: it sends explicit `fuse=0,keyctl=0,mknod=0` alongside nesting, even when only nesting changes. Proxmox distinguishes omitted flags from explicit zeros during its permission check. Removing the false settings from HCL does not help because the provider supplies defaults. See the [provider update implementation](https://github.com/bpg/terraform-provider-proxmox/blob/v0.118.1/proxmoxtf/resource/container/container.go#L2551-L2623) and [Proxmox permission check](https://github.com/proxmox/pve-container/blob/master/src/PVE/LXC.pm).
+Nesting is managed automatically by a native `magodo/restful` resource using the same non-root API token. The Proxmox resource sets initial features at container creation, then ignores feature updates; the REST resource owns subsequent nesting changes and detects external drift. This avoids the pinned Proxmox provider's root-only update serialization. It sends only `nesting=1` or `nesting=0`, preserving any already-present `fuse=0`, `keyctl=0` and `mknod=0` flags because Proxmox distinguishes omitted flags from explicit zeros. Enabled or unsupported unrelated feature flags cause a clear error before any REST write. See the [provider implementation](https://github.com/bpg/terraform-provider-proxmox/blob/v0.118.1/proxmoxtf/resource/container/container.go#L2551-L2623) and [Proxmox permission check](https://github.com/proxmox/pve-container/blob/master/src/PVE/LXC.pm).
 
-For an unprivileged container whose features are absent or contain only nesting, send a nesting-only request from your workstation with the existing API token. The API identity and token need `VM.Allocate` on the affected container. For Plex (`1009`) with `nesting = true`:
-
-```sh
-curl --fail-with-body --silent --show-error --insecure \
-  --request PUT \
-  --header "Authorization: PVEAPIToken=${PROXMOX_VE_API_TOKEN}" \
-  --data-urlencode 'features=nesting=1' \
-  'https://192.168.100.10:8006/api2/json/nodes/pve/lxc/1009/config'
-```
-
-Replace the endpoint, node and CT ID for other deployments. The example skips certificate verification to match this home deployment's opt-in setting; omit `--insecure` for trusted certificates. Use `nesting=0` instead when the guest's tfvars setting is false. The `features` parameter replaces the full feature string: if other flags are already present, preserve them unchanged in that string. The API token can change nesting without root authentication; changing other flags remains subject to Proxmox's root-only restriction.
-
-If Proxmox shows pending feature changes, restart that container during an appropriate maintenance window. Then generate a fresh Terraform plan before applying; do not reuse the failed saved plan. This is a manual workaround for the provider's update serialization. Later nesting changes through the pinned provider can encounter the same error; the Terraform configuration cannot suppress its extra zero-valued flags.
+Existing containers acquire REST feature ownership on the next apply without an import. The additional resource is replaced when the container is replaced, including reuse of the same CT ID. Its destroy action sends a feature-only PUT disabling nesting before container deletion; it never deletes the container through the REST provider. TLS verification follows `proxmox_insecure_tls`. No root authentication, host commands, scripts or per-container manual API requests are required. Proxmox may stage feature changes on running containers until their next restart; this module does not automatically reboot them.
 
 For existing deployments, rename `template_id` to `vm_template_id` in your private tfvars. A `moved` block migrates the existing VM resource address to its new `[0]` index without recreating it; existing network, firewall and DNS resource addresses remain. Inspect the plan for moves rather than replacements. Changing an existing entry's `type` does not convert its filesystem: create a new guest with a new ID/slot and migrate the workload/data separately. Changing a template can require replacement.
 

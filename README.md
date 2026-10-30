@@ -37,13 +37,13 @@ terraform -chdir=environments/home apply -parallelism=1 home.tfplan
 
 Guests default to stopped. Inspect their networking and firewall enforcement, then set `started = true` in a second apply.
 
-Local validation and mock-provider tests require only Terraform and Make:
+Local checks require Terraform, Make, and Node.js. They include mock-provider tests and a real REST provider test against a loopback-only API fixture:
 
 ```sh
 make init
 make check
 ```
 
-Providers are pinned to `bpg/proxmox` 0.118.1, `lukaspustina/pihole` 0.3.1, and `neuspaces/system` 0.5.0. Terraform >=1.9 is required; checks use Terraform 1.14.8. The BPG SDN applier is marked experimental by its maintainer, so verify its lifecycle on disposable guests before migration.
+Providers are pinned to `bpg/proxmox` 0.118.1, `lukaspustina/pihole` 0.3.1, `magodo/restful` 0.25.2, and `neuspaces/system` 0.5.0. The home environment requires Terraform >=1.10 for its shared ephemeral API token; checks use Terraform 1.14.8 and Node.js >=22. The BPG SDN applier is marked experimental by its maintainer, so verify its lifecycle on disposable guests before migration.
 
 This provisions infrastructure. VPN, reverse proxy, application software, and existing guest migration are separate work. Application containers can also run inside the managed VMs. Keep state, plans, passwords, and private variables out of Git.

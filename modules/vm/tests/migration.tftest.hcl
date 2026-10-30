@@ -1,3 +1,9 @@
+mock_provider "restful" {
+  override_during = plan
+  mock_data "restful_resource" {
+    defaults = { output = { features = "" } }
+  }
+}
 mock_provider "proxmox" {}
 
 run "legacy_vm_state" {

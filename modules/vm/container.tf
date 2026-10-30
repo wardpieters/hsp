@@ -35,6 +35,10 @@ resource "proxmox_virtual_environment_container" "this" {
     keyctl  = false
     mknod   = false
   }
+  lifecycle {
+    # bpg/proxmox emits root-only flags on updates; the REST resource owns feature updates.
+    ignore_changes = [features]
+  }
   network_interface {
     name     = "eth0"
     bridge   = var.network.vnet_id

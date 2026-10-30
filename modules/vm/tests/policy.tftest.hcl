@@ -1,3 +1,9 @@
+mock_provider "restful" {
+  override_during = plan
+  mock_data "restful_resource" {
+    defaults = { output = { features = "" } }
+  }
+}
 mock_provider "proxmox" {}
 variables {
   name            = "owncloud"
@@ -15,6 +21,10 @@ variables {
 }
 run "stopped_and_isolated" {
   command = plan
+  assert {
+    condition     = length(restful_resource.nesting) == 0 && length(data.restful_resource.container_features) == 0
+    error_message = "VM guests must never create REST nesting resources or reads."
+  }
   assert {
     condition     = length(proxmox_virtual_environment_vm.this) == 1 && length(proxmox_virtual_environment_container.this) == 0 && proxmox_virtual_environment_firewall_options.this.vm_id == 100 && proxmox_virtual_environment_firewall_options.this.container_id == null && proxmox_virtual_environment_firewall_ipset.this.container_id == null && proxmox_virtual_environment_firewall_rules.this.container_id == null
     error_message = "Existing guests must remain VMs and retain VM firewall endpoints by default."

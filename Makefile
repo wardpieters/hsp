@@ -6,5 +6,6 @@ init:
 check:
 	terraform fmt -check -recursive
 	@set -e; for dir in $(TF_DIRS); do terraform -chdir=$$dir validate -no-color; terraform -chdir=$$dir test -no-color; done
+	node --test tests/nesting-api.test.mjs
 fmt:
 	terraform fmt -recursive
