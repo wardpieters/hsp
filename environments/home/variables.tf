@@ -136,6 +136,7 @@ variable "guests" {
   type = map(object({
     vm_id                 = number, slot = number, vnet_id = string, role = optional(string, "workload"),
     type                  = optional(string, "vm"),
+    nesting               = optional(bool, false),
     started               = optional(bool, false), on_boot = optional(bool, false),
     bootstrap             = optional(bool, false),
     cores                 = optional(number, 2), memory_mb = optional(number, 2048), disk_gb = optional(number, 16),

@@ -2,6 +2,7 @@ variable "guest" {
   type = object({
     name                  = string, vm_id = number, vm_template_id = optional(number), datastore_id = string,
     type                  = optional(string, "vm"),
+    nesting               = optional(bool, false),
     started               = optional(bool, false), on_boot = optional(bool, false), cores = optional(number, 2),
     memory_mb             = optional(number, 2048), disk_gb = optional(number, 16),
     backup                = optional(bool, true),
@@ -39,6 +40,7 @@ module "vm" {
   node_name              = var.node_name
   vm_id                  = var.guest.vm_id
   guest_type             = var.guest.type
+  nesting                = var.guest.nesting
   lxc_template           = var.lxc_template
   mount_points           = var.guest.mount_points
   vm_template_id         = var.guest.vm_template_id

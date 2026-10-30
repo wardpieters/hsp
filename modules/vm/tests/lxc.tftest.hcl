@@ -129,6 +129,23 @@ run "lxc_explicit_activation" {
     error_message = "Explicitly activated LXC guests must honor started and on_boot."
   }
 }
+run "lxc_nesting_is_opt_in" {
+  command = plan
+  variables { nesting = true }
+  assert {
+    condition     = proxmox_virtual_environment_container.this[0].features[0].nesting && proxmox_virtual_environment_container.this[0].unprivileged && !proxmox_virtual_environment_container.this[0].features[0].keyctl && !proxmox_virtual_environment_container.this[0].features[0].fuse && !proxmox_virtual_environment_container.this[0].features[0].mknod
+    error_message = "Opting into nesting must enable only that feature while keeping the container unprivileged."
+  }
+}
+run "reject_nesting_on_vm" {
+  command = plan
+  variables {
+    guest_type     = "vm"
+    vm_template_id = 9000
+    nesting        = true
+  }
+  expect_failures = [var.nesting]
+}
 run "container_firewall_targets_lxc" {
   command = plan
   assert {

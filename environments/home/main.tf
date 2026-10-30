@@ -29,7 +29,7 @@ module "service" {
   lxc_template           = var.lxc_template
   guest = {
     name                  = each.key, vm_id = each.value.vm_id, vm_template_id = var.vm_template_id, datastore_id = var.datastore_id,
-    type                  = each.value.type, mount_points = each.value.mount_points,
+    type                  = each.value.type, nesting = each.value.nesting, mount_points = each.value.mount_points,
     started               = each.value.started, on_boot = each.value.on_boot, cores = each.value.cores,
     memory_mb             = each.value.memory_mb, disk_gb = each.value.disk_gb,
     backup                = each.value.backup,

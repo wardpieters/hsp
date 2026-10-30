@@ -28,7 +28,7 @@ resource "proxmox_virtual_environment_container" "this" {
     }
   }
   features {
-    nesting = false
+    nesting = var.nesting
     fuse    = false
     keyctl  = false
     mknod   = false

@@ -23,6 +23,16 @@ variable "vm_template_id" {
     error_message = "VM guests require a valid vm_template_id."
   }
 }
+variable "nesting" {
+  description = "Enable Proxmox nesting for this LXC container."
+  type        = bool
+  default     = false
+  nullable    = false
+  validation {
+    condition     = !var.nesting || var.guest_type == "lxc"
+    error_message = "nesting can only be enabled for LXC guests."
+  }
+}
 variable "lxc_template" {
   type    = object({ file_id = string, os_type = optional(string, "debian") })
   default = null
