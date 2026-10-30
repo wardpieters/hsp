@@ -1,4 +1,5 @@
 resource "proxmox_virtual_environment_vm" "this" {
+  count       = var.guest_type == "vm" ? 1 : 0
   name        = var.name
   node_name   = var.node_name
   vm_id       = var.vm_id
@@ -8,7 +9,7 @@ resource "proxmox_virtual_environment_vm" "this" {
   on_boot     = var.on_boot
   # Never inherit extra clone interfaces or host devices from an unsuitable template.
   clone {
-    vm_id        = var.template_id
+    vm_id        = var.vm_template_id
     full         = true
     datastore_id = var.datastore_id
   }
@@ -49,17 +50,28 @@ resource "proxmox_virtual_environment_vm" "this" {
   }
 }
 
+moved {
+  from = proxmox_virtual_environment_vm.this
+  to   = proxmox_virtual_environment_vm.this[0]
+}
+
+locals {
+  guest_id = var.guest_type == "vm" ? proxmox_virtual_environment_vm.this[0].vm_id : proxmox_virtual_environment_container.this[0].vm_id
+}
+
 resource "proxmox_virtual_environment_firewall_ipset" "this" {
-  node_name = var.node_name
-  vm_id     = proxmox_virtual_environment_vm.this.vm_id
-  name      = "ipfilter-net0"
+  node_name    = var.node_name
+  vm_id        = var.guest_type == "vm" ? local.guest_id : null
+  container_id = var.guest_type == "lxc" ? local.guest_id : null
+  name         = "ipfilter-net0"
   # Proxmox returns single IPv4 hosts without /32. Match that canonical form
   # so the provider does not replace an otherwise unchanged anti-spoofing set.
   cidr { name = var.network.address }
 }
 resource "proxmox_virtual_environment_firewall_options" "this" {
   node_name     = var.node_name
-  vm_id         = proxmox_virtual_environment_vm.this.vm_id
+  vm_id         = var.guest_type == "vm" ? local.guest_id : null
+  container_id  = var.guest_type == "lxc" ? local.guest_id : null
   enabled       = true
   input_policy  = "DROP"
   output_policy = "DROP"
@@ -72,8 +84,9 @@ resource "proxmox_virtual_environment_firewall_options" "this" {
   log_level_out = "info"
 }
 resource "proxmox_virtual_environment_firewall_rules" "this" {
-  node_name = var.node_name
-  vm_id     = proxmox_virtual_environment_vm.this.vm_id
+  node_name    = var.node_name
+  vm_id        = var.guest_type == "vm" ? local.guest_id : null
+  container_id = var.guest_type == "lxc" ? local.guest_id : null
   dynamic "rule" {
     for_each = local.rules
     content {
@@ -90,5 +103,6 @@ resource "proxmox_virtual_environment_firewall_rules" "this" {
     }
   }
 }
-output "vm_id" { value = proxmox_virtual_environment_vm.this.vm_id }
+output "vm_id" { value = local.guest_id }
+output "guest_type" { value = length(proxmox_virtual_environment_container.this) == 1 ? "lxc" : "vm" }
 output "rules" { value = local.rules }

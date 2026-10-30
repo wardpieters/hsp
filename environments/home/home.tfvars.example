@@ -15,14 +15,20 @@ manage_host_firewall = false # Opt in only after reviewing/importing existing ru
 dns_servers         = ["192.168.50.53"]
 ntp_servers         = [] # Use the guest's configured NTP pool instead of fixed-IP exceptions.
 internet_egress_ports = [{ protocol = "udp", port = 123 }] # Shared by every VM.
-template_id         = 9000
+vm_template_id      = 9000 # Renamed from template_id; used only by VM guests.
+# Required only when declaring LXC guests. Use the archive already on your host.
+lxc_template = {
+  file_id = "local:vztmpl/REPLACE_WITH_DOWNLOADED_TEMPLATE.tar.zst"
+  os_type = "debian" # Defaults to debian; match the template's distribution.
+}
 datastore_id        = "local-lvm"
 ssh_public_keys     = ["REPLACE_WITH_YOUR_SSH_PUBLIC_KEY"]
 private_proxy_name  = "proxy-private"
 http_proxy_name     = "http-proxy" # Every other guest may reach this VM on TCP 3128.
 
 # New guests start stopped, without autostart. Configure VPN/proxy software later.
-# Each guest defaults to backup = true; set backup = false to exclude its disk.
+# VMs default to backup = true; set backup = false to exclude their disk.
+# LXC rootfs backups follow job selection; configure extra-volume backups per mount.
 # Per-VM internet egress adds to the global list, e.g. [{ protocol = "tcp", port = 443 }].
 guests = {
   vpn-admin = {
@@ -63,6 +69,18 @@ guests = {
     dns = { http-proxy = { mode = "direct" } }
     cores = 1
     memory_mb = 512
+  }
+  files = {
+    type = "lxc" # Omit type for a VM.
+    vm_id = 1007, slot = 7, vnet_id = "hsp1007"
+    cores = 1
+    memory_mb = 512
+    disk_gb = 8
+    mount_points = [
+      { path = "/srv/data", size_gb = 50 }, # Uses datastore_id; included in backups.
+      { path = "/srv/cache", size_gb = 8, datastore_id = "local-lvm", backup = false },
+    ]
+    dns = { files = { mode = "direct" } }
   }
 }
 connections = [

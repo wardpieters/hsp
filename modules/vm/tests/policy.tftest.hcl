@@ -3,7 +3,7 @@ variables {
   name            = "owncloud"
   node_name       = "pve"
   vm_id           = 100
-  template_id     = 9000
+  vm_template_id  = 9000
   datastore_id    = "local-lvm"
   network         = { address = "10.77.0.2", gateway = "10.77.0.1", cidr = "10.77.0.0/30", vnet_id = "hsp100" }
   protected_cidrs = ["192.168.1.0/24", "10.77.0.0/24"]
@@ -16,11 +16,15 @@ variables {
 run "stopped_and_isolated" {
   command = plan
   assert {
-    condition     = proxmox_virtual_environment_vm.this.disk[0].backup
+    condition     = length(proxmox_virtual_environment_vm.this) == 1 && length(proxmox_virtual_environment_container.this) == 0 && proxmox_virtual_environment_firewall_options.this.vm_id == 100 && proxmox_virtual_environment_firewall_options.this.container_id == null && proxmox_virtual_environment_firewall_ipset.this.container_id == null && proxmox_virtual_environment_firewall_rules.this.container_id == null
+    error_message = "Existing guests must remain VMs and retain VM firewall endpoints by default."
+  }
+  assert {
+    condition     = proxmox_virtual_environment_vm.this[0].disk[0].backup
     error_message = "VM disks must be included in backups by default."
   }
   assert {
-    condition     = !proxmox_virtual_environment_vm.this.started && !proxmox_virtual_environment_vm.this.on_boot && proxmox_virtual_environment_vm.this.network_device[0].firewall
+    condition     = !proxmox_virtual_environment_vm.this[0].started && !proxmox_virtual_environment_vm.this[0].on_boot && proxmox_virtual_environment_vm.this[0].network_device[0].firewall
     error_message = "New guests must remain stopped with NIC enforcement enabled."
   }
   assert {
@@ -92,7 +96,7 @@ run "backup_disabled" {
   command = plan
   variables { backup = false }
   assert {
-    condition     = !proxmox_virtual_environment_vm.this.disk[0].backup
+    condition     = !proxmox_virtual_environment_vm.this[0].disk[0].backup
     error_message = "A VM can explicitly exclude its managed disk from backups."
   }
 }

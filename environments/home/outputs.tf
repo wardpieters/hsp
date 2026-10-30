@@ -1,6 +1,6 @@
 output "guests" {
   value = { for name, g in module.service : name => {
-    vm_id = g.vm_id, address = g.address, names = g.names, started = var.guests[name].started
+    vm_id = g.vm_id, type = g.type, address = g.address, names = g.names, started = var.guests[name].started
   } }
 }
 output "router_route" {

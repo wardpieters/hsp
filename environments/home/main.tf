@@ -26,8 +26,10 @@ module "service" {
   ssh_public_keys        = var.ssh_public_keys
   public_ports_lan_cidrs = var.public_ports_lan_cidrs
   service_access_cidrs   = each.key == var.private_proxy_name ? var.service_access_cidrs : []
+  lxc_template           = var.lxc_template
   guest = {
-    name                  = each.key, vm_id = each.value.vm_id, template_id = var.template_id, datastore_id = var.datastore_id,
+    name                  = each.key, vm_id = each.value.vm_id, vm_template_id = var.vm_template_id, datastore_id = var.datastore_id,
+    type                  = each.value.type, mount_points = each.value.mount_points,
     started               = each.value.started, on_boot = each.value.on_boot, cores = each.value.cores,
     memory_mb             = each.value.memory_mb, disk_gb = each.value.disk_gb,
     backup                = each.value.backup,

@@ -86,7 +86,7 @@ variable "manage_host_firewall" {
 variable "dns_servers" { type = list(string) }
 variable "ntp_servers" { type = list(string) }
 variable "internet_egress_ports" {
-  description = "Outbound TCP/UDP destination ports allowed for every VM, combined with each guest's internet_egress_ports."
+  description = "Outbound TCP/UDP destination ports allowed for every VM and LXC, combined with each guest's internet_egress_ports."
   type        = list(object({ protocol = string, port = number }))
   default     = []
   nullable    = false
@@ -95,7 +95,24 @@ variable "internet_egress_ports" {
     error_message = "Global internet egress ports require TCP/UDP and an integer destination port from 1 to 65535."
   }
 }
-variable "template_id" { type = number }
+variable "vm_template_id" {
+  description = "Cloud-init VM template ID, required when any VM guest is declared."
+  type        = number
+  default     = null
+  validation {
+    condition     = alltrue([for g in values(var.guests) : g.type != "vm"]) || try(var.vm_template_id >= 100 && var.vm_template_id <= 999999999 && floor(var.vm_template_id) == var.vm_template_id, false)
+    error_message = "VM guests require a valid vm_template_id. Rename the former template_id input."
+  }
+}
+variable "lxc_template" {
+  description = "Downloaded Proxmox OS archive used by every LXC guest; os_type defaults to debian."
+  type        = object({ file_id = string, os_type = optional(string, "debian") })
+  default     = null
+  validation {
+    condition     = alltrue([for g in values(var.guests) : g.type != "lxc"]) || var.lxc_template != null
+    error_message = "LXC guests require the global lxc_template with a downloaded storage:vztmpl/archive file_id."
+  }
+}
 variable "datastore_id" { type = string }
 variable "ssh_public_keys" { type = list(string) }
 variable "http_proxy_name" {
@@ -118,10 +135,12 @@ variable "private_proxy_name" {
 variable "guests" {
   type = map(object({
     vm_id                 = number, slot = number, vnet_id = string, role = optional(string, "workload"),
+    type                  = optional(string, "vm"),
     started               = optional(bool, false), on_boot = optional(bool, false),
     bootstrap             = optional(bool, false),
     cores                 = optional(number, 2), memory_mb = optional(number, 2048), disk_gb = optional(number, 16),
     backup                = optional(bool, true),
+    mount_points          = optional(list(object({ path = string, size_gb = number, datastore_id = optional(string), backup = optional(bool, true) })), []),
     internet_egress_ports = optional(list(object({ protocol = string, port = number })), []),
     public_ports          = optional(list(object({ protocol = string, port = number })), []),
     dns                   = optional(map(object({ mode = string, proxy_name = optional(string), proxy_address = optional(string) })), {})
@@ -133,10 +152,11 @@ variable "guests" {
       length(distinct([for g in values(var.guests) : g.vnet_id])) == length(var.guests) &&
       length(distinct(flatten([for g in values(var.guests) : keys(g.dns)]))) == length(flatten([for g in values(var.guests) : keys(g.dns)])) &&
       alltrue([for name, g in var.guests : can(regex("^[a-z][a-z0-9-]{0,62}$", name)) &&
+        contains(["vm", "lxc"], g.type) &&
         contains(["workload", "public_proxy", "private_proxy", "admin_vpn", "service_vpn", "management"], g.role) &&
       (!contains(["private_proxy", "management"], g.role) || length(g.public_ports) == 0)])
     )
-    error_message = "Guest names/roles must be valid, VM IDs/slots/VNets/DNS aliases unique, and private/management guests cannot expose public ports."
+    error_message = "Guest names/types/roles must be valid, VM/LXC IDs/slots/VNets/DNS aliases unique, and private/management guests cannot expose public ports."
   }
   validation {
     condition = alltrue(flatten([for g in values(var.guests) : [for d in values(g.dns) : d.mode != "proxy" || try(

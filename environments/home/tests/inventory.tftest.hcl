@@ -11,7 +11,7 @@ variables {
   bootstrap_admin_cidrs = ["192.168.1.42/32"]
   dns_servers           = ["192.168.1.53"]
   ntp_servers           = ["192.168.1.1"]
-  template_id           = 9000
+  vm_template_id        = 9000
   datastore_id          = "local-lvm"
   ssh_public_keys       = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGbQ7fxCXpGk6DckT2PRXJ5w5pMR6qksY6hOyw4mftR1 test"]
   guests = {

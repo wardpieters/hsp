@@ -1,9 +1,11 @@
 variable "guest" {
   type = object({
-    name                  = string, vm_id = number, template_id = number, datastore_id = string,
+    name                  = string, vm_id = number, vm_template_id = optional(number), datastore_id = string,
+    type                  = optional(string, "vm"),
     started               = optional(bool, false), on_boot = optional(bool, false), cores = optional(number, 2),
     memory_mb             = optional(number, 2048), disk_gb = optional(number, 16),
     backup                = optional(bool, true),
+    mount_points          = optional(list(object({ path = string, size_gb = number, datastore_id = optional(string), backup = optional(bool, true) })), []),
     internet_egress_ports = optional(list(object({ protocol = string, port = number })), []),
     public_ports          = optional(list(object({ protocol = string, port = number })), []),
     allow_rules           = optional(list(object({ direction = string, address = string, protocol = string, ports = string, description = string })), []),
@@ -26,13 +28,20 @@ variable "service_access_cidrs" {
   default  = []
   nullable = false
 }
+variable "lxc_template" {
+  type    = object({ file_id = string, os_type = optional(string, "debian") })
+  default = null
+}
 
 module "vm" {
   source                 = "../vm"
   name                   = var.guest.name
   node_name              = var.node_name
   vm_id                  = var.guest.vm_id
-  template_id            = var.guest.template_id
+  guest_type             = var.guest.type
+  lxc_template           = var.lxc_template
+  mount_points           = var.guest.mount_points
+  vm_template_id         = var.guest.vm_template_id
   datastore_id           = var.guest.datastore_id
   network                = var.network
   started                = var.guest.started
@@ -57,5 +66,6 @@ module "dns" {
 }
 output "address" { value = var.network.address }
 output "vm_id" { value = module.vm.vm_id }
+output "type" { value = module.vm.guest_type }
 output "names" { value = module.dns.names }
 output "rules" { value = module.vm.rules }

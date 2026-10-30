@@ -7,8 +7,55 @@ variable "vm_id" {
     error_message = "vm_id must be an integer in Proxmox's guest ID range."
   }
 }
-variable "template_id" { type = number }
-variable "datastore_id" { type = string }
+variable "guest_type" {
+  type    = string
+  default = "vm"
+  validation {
+    condition     = contains(["vm", "lxc"], var.guest_type)
+    error_message = "guest_type must be vm or lxc."
+  }
+}
+variable "vm_template_id" {
+  type    = number
+  default = null
+  validation {
+    condition     = var.guest_type != "vm" || try(var.vm_template_id >= 100 && var.vm_template_id <= 999999999 && floor(var.vm_template_id) == var.vm_template_id, false)
+    error_message = "VM guests require a valid vm_template_id."
+  }
+}
+variable "lxc_template" {
+  type    = object({ file_id = string, os_type = optional(string, "debian") })
+  default = null
+  validation {
+    condition = var.guest_type != "lxc" || try(
+      can(regex("^[A-Za-z][A-Za-z0-9_-]*:vztmpl/[^/[:space:]]+$", var.lxc_template.file_id)) &&
+    contains(["alpine", "archlinux", "centos", "debian", "devuan", "fedora", "gentoo", "nixos", "opensuse", "ubuntu"], var.lxc_template.os_type), false)
+    error_message = "LXC guests require lxc_template with a storage:vztmpl/archive file_id and a supported managed os_type."
+  }
+}
+variable "datastore_id" {
+  type = string
+  validation {
+    condition     = var.guest_type != "lxc" || can(regex("^[A-Za-z][A-Za-z0-9_-]*$", var.datastore_id))
+    error_message = "LXC datastore_id must be a storage ID, never a host path or existing volume reference."
+  }
+}
+variable "mount_points" {
+  description = "Ordered LXC-managed volumes, sized in GiB and mounted at absolute container paths. Append entries to preserve mp indexes."
+  type        = list(object({ path = string, size_gb = number, datastore_id = optional(string), backup = optional(bool, true) }))
+  default     = []
+  nullable    = false
+  validation {
+    condition = try(
+      (var.guest_type == "lxc" || length(var.mount_points) == 0) && length(var.mount_points) <= 256 &&
+      length(distinct([for m in var.mount_points : m.path])) == length(var.mount_points) &&
+      alltrue([for m in var.mount_points :
+        can(regex("^/[^[:space:],=\\\\]+$", m.path)) && alltrue([for part in split("/", trimprefix(m.path, "/")) : part != "" && !contains([".", ".."], part)]) &&
+        m.size_gb > 0 && floor(m.size_gb) == m.size_gb &&
+    (m.datastore_id == null || can(regex("^[A-Za-z][A-Za-z0-9_-]*$", m.datastore_id)))]), false)
+    error_message = "Mount points are LXC-only: use unique normalized absolute non-root paths without whitespace, commas, equals or backslashes; positive integer sizes in GiB; and storage IDs instead of host paths or existing volumes."
+  }
+}
 variable "network" {
   type = object({ address = string, gateway = string, cidr = string, vnet_id = string })
   validation {
@@ -46,6 +93,10 @@ variable "backup" {
   description = "Include the managed VM disk in Proxmox backups."
   type        = bool
   default     = true
+  validation {
+    condition     = var.guest_type != "lxc" || var.backup
+    error_message = "LXC root filesystems have no backup toggle. Omit backup=false and exclude the container in your backup job instead; configure mount backups per mount_point."
+  }
 }
 variable "ssh_public_keys" {
   type = list(string)

@@ -1,0 +1,166 @@
+mock_provider "proxmox" {}
+variables {
+  name            = "files"
+  node_name       = "pve"
+  vm_id           = 100
+  guest_type      = "lxc"
+  lxc_template    = { file_id = "local:vztmpl/debian-test.tar.zst" }
+  datastore_id    = "local-lvm"
+  network         = { address = "10.77.0.2", gateway = "10.77.0.1", cidr = "10.77.0.0/30", vnet_id = "hsp100" }
+  protected_cidrs = ["192.168.1.0/24", "10.77.0.0/24"]
+  dns_servers     = ["192.168.1.53"]
+  ntp_servers     = []
+  ssh_public_keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGbQ7fxCXpGk6DckT2PRXJ5w5pMR6qksY6hOyw4mftR1 test"]
+}
+run "managed_mount_volumes" {
+  command = plan
+  variables {
+    mount_points = [
+      { path = "/srv/data", size_gb = 50 },
+      { path = "/srv/cache", size_gb = 8, datastore_id = "fast-lvm", backup = false },
+    ]
+  }
+  assert {
+    condition     = length(proxmox_virtual_environment_container.this[0].mount_point) == 2
+    error_message = "Each requested mount must allocate a managed volume."
+  }
+  assert {
+    condition     = try(proxmox_virtual_environment_container.this[0].mount_point[0].volume == "local-lvm" && proxmox_virtual_environment_container.this[0].mount_point[0].size == "50G" && proxmox_virtual_environment_container.this[0].mount_point[0].path == "/srv/data" && proxmox_virtual_environment_container.this[0].mount_point[0].backup && proxmox_virtual_environment_container.this[0].mount_point[1].volume == "fast-lvm" && proxmox_virtual_environment_container.this[0].mount_point[1].size == "8G" && proxmox_virtual_environment_container.this[0].mount_point[1].path == "/srv/cache" && !proxmox_virtual_environment_container.this[0].mount_point[1].backup, false)
+    error_message = "Mount order, size, container path, default/override storage and per-mount backup flags must be preserved."
+  }
+}
+run "reject_mount_on_vm" {
+  command = plan
+  variables {
+    guest_type     = "vm"
+    vm_template_id = 9000
+    mount_points   = [{ path = "/srv/data", size_gb = 50 }]
+  }
+  expect_failures = [var.mount_points]
+}
+run "reject_mount_relative_path" {
+  command = plan
+  variables { mount_points = [{ path = "srv/data", size_gb = 50 }] }
+  expect_failures = [var.mount_points]
+}
+run "reject_mount_root_path" {
+  command = plan
+  variables { mount_points = [{ path = "/", size_gb = 50 }] }
+  expect_failures = [var.mount_points]
+}
+run "reject_mount_parent_path" {
+  command = plan
+  variables { mount_points = [{ path = "/srv/../data", size_gb = 50 }] }
+  expect_failures = [var.mount_points]
+}
+run "reject_mount_dot_path" {
+  command = plan
+  variables { mount_points = [{ path = "/srv/./data", size_gb = 50 }] }
+  expect_failures = [var.mount_points]
+}
+run "reject_mount_empty_path_component" {
+  command = plan
+  variables { mount_points = [{ path = "/srv//data", size_gb = 50 }] }
+  expect_failures = [var.mount_points]
+}
+run "reject_mount_duplicate_path" {
+  command = plan
+  variables { mount_points = [{ path = "/srv/data", size_gb = 50 }, { path = "/srv/data", size_gb = 8 }] }
+  expect_failures = [var.mount_points]
+}
+run "reject_mount_zero_size" {
+  command = plan
+  variables { mount_points = [{ path = "/srv/data", size_gb = 0 }] }
+  expect_failures = [var.mount_points]
+}
+run "reject_mount_fractional_size" {
+  command = plan
+  variables { mount_points = [{ path = "/srv/data", size_gb = 1.5 }] }
+  expect_failures = [var.mount_points]
+}
+run "reject_mount_host_bind_source" {
+  command = plan
+  variables { mount_points = [{ path = "/srv/data", size_gb = 50, datastore_id = "/etc" }] }
+  expect_failures = [var.mount_points]
+}
+run "reject_mount_existing_volume_source" {
+  command = plan
+  variables { mount_points = [{ path = "/srv/data", size_gb = 50, datastore_id = "local-lvm:vm-100-disk-0" }] }
+  expect_failures = [var.mount_points]
+}
+run "reject_lxc_host_path_datastore" {
+  command = plan
+  variables { datastore_id = "/etc" }
+  expect_failures = [var.datastore_id]
+}
+run "reject_lxc_backup_false" {
+  command = plan
+  variables { backup = false }
+  expect_failures = [var.backup]
+}
+run "reject_missing_lxc_template" {
+  command = plan
+  variables { lxc_template = null }
+  expect_failures = [var.lxc_template]
+}
+run "reject_unmanaged_lxc_template" {
+  command = plan
+  variables { lxc_template = { file_id = "local:vztmpl/test.tar.zst", os_type = "unmanaged" } }
+  expect_failures = [var.lxc_template]
+}
+run "reject_iso_as_lxc_template" {
+  command = plan
+  variables { lxc_template = { file_id = "local:iso/test.iso" } }
+  expect_failures = [var.lxc_template]
+}
+run "reject_lxc_autostart_before_activation" {
+  command = plan
+  variables { on_boot = true }
+  expect_failures = [var.on_boot]
+}
+run "lxc_explicit_activation" {
+  command = plan
+  variables {
+    started = true
+    on_boot = true
+  }
+  assert {
+    condition     = proxmox_virtual_environment_container.this[0].started && proxmox_virtual_environment_container.this[0].start_on_boot
+    error_message = "Explicitly activated LXC guests must honor started and on_boot."
+  }
+}
+run "container_firewall_targets_lxc" {
+  command = plan
+  assert {
+    condition     = length(proxmox_virtual_environment_vm.this) == 0 && length(proxmox_virtual_environment_container.this) == 1 && proxmox_virtual_environment_container.this[0].unprivileged && !proxmox_virtual_environment_container.this[0].started && !proxmox_virtual_environment_container.this[0].start_on_boot
+    error_message = "An LXC declaration must create one unprivileged, stopped container and no VM."
+  }
+  assert {
+    condition     = length(proxmox_virtual_environment_container.this[0].network_interface) == 1 && proxmox_virtual_environment_container.this[0].network_interface[0].bridge == "hsp100" && proxmox_virtual_environment_container.this[0].network_interface[0].firewall && proxmox_virtual_environment_container.this[0].initialization[0].ip_config[0].ipv4[0].address == "10.77.0.2/30" && proxmox_virtual_environment_container.this[0].initialization[0].ip_config[0].ipv4[0].gateway == "10.77.0.1"
+    error_message = "The container must have exactly one enforced SDN interface with its assigned static address and gateway."
+  }
+  assert {
+    condition     = proxmox_virtual_environment_container.this[0].initialization[0].user_account[0].keys == var.ssh_public_keys && proxmox_virtual_environment_container.this[0].operating_system[0].template_file_id == "local:vztmpl/debian-test.tar.zst" && proxmox_virtual_environment_container.this[0].operating_system[0].type == "debian"
+    error_message = "Container creation must use the selected OS archive, managed distribution setup, and root SSH keys."
+  }
+  assert {
+    condition     = !proxmox_virtual_environment_container.this[0].features[0].nesting && !proxmox_virtual_environment_container.this[0].features[0].keyctl && !proxmox_virtual_environment_container.this[0].features[0].fuse && !proxmox_virtual_environment_container.this[0].features[0].mknod && !proxmox_virtual_environment_container.this[0].delete_unreferenced_disks_on_destroy
+    error_message = "Containers must not enable optional privilege-expanding features or deletion of unreferenced disks."
+  }
+  assert {
+    condition = (
+      proxmox_virtual_environment_firewall_options.this.container_id == 100 && proxmox_virtual_environment_firewall_options.this.vm_id == null &&
+      proxmox_virtual_environment_firewall_ipset.this.container_id == 100 && proxmox_virtual_environment_firewall_ipset.this.vm_id == null &&
+      proxmox_virtual_environment_firewall_rules.this.container_id == 100 && proxmox_virtual_environment_firewall_rules.this.vm_id == null
+    )
+    error_message = "All firewall resources must target the LXC API, never the QEMU VM API."
+  }
+  assert {
+    condition     = alltrue([for r in proxmox_virtual_environment_firewall_rules.this.rule : r.iface == "net0"])
+    error_message = "Container firewall rules must use Proxmox's net0 selector, not the internal eth0 name."
+  }
+  assert {
+    condition     = proxmox_virtual_environment_firewall_options.this.enabled && proxmox_virtual_environment_firewall_options.this.input_policy == "DROP" && proxmox_virtual_environment_firewall_options.this.output_policy == "DROP" && proxmox_virtual_environment_firewall_options.this.macfilter && proxmox_virtual_environment_firewall_options.this.ipfilter && !proxmox_virtual_environment_firewall_options.this.dhcp && !proxmox_virtual_environment_firewall_options.this.ndp && proxmox_virtual_environment_firewall_ipset.this.cidr[0].name == "10.77.0.2" && output.rules[0].source == "::/0" && output.rules[0].action == "DROP" && output.rules[1].dest == "::/0" && output.rules[1].action == "DROP"
+    error_message = "LXC must retain default DROP, anti-spoofing, and explicit IPv6 blocking."
+  }
+}

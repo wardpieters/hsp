@@ -2,9 +2,9 @@
 
 The [role and firewall reference](firewall-roles.md) lists all guest roles, automatic permissions, shared rules, and the effects of `public_ports`, `connections`, and `internet_egress_ports`.
 
-Each guest accepts `backup` in `home.tfvars`, defaulting to `true`. Set `backup = false` inside a guest's entry to exclude its managed `scsi0` disk from Proxmox backups. Backup-job schedules and any separate configuration-only backups are managed outside this configuration.
+VM guests accept `backup` in `home.tfvars`, defaulting to `true`. Set `backup = false` inside a VM's entry to exclude its managed `scsi0` disk from Proxmox backups. LXC root filesystems follow backup-job selection and reject this flag when false; extra mount volumes have their own backup flags. Backup-job schedules and any separate configuration-only backups are managed outside this configuration.
 
-Top-level `internet_egress_ports` applies to every VM and is combined with each guest's own list; both default to `[]`. Declare shared TCP/UDP destination ports globally and add VM-specific ports inside guest entries. The example allows global UDP 123 for Debian NTP pools and uses `ntp_servers = []` to remove fixed-IP NTP exceptions. Replace the former `allow_updates` flag with explicit egress entries. Approved DNS/NTP, declared dependencies, and replies to permitted inbound connections remain available independently. See the [outbound port examples](firewall-roles.md#outbound-internet-ports).
+Top-level `internet_egress_ports` applies to every VM and LXC and is combined with each guest's own list; both default to `[]`. Declare shared TCP/UDP destination ports globally and add VM-specific ports inside guest entries. The example allows global UDP 123 for Debian NTP pools and uses `ntp_servers = []` to remove fixed-IP NTP exceptions. Replace the former `allow_updates` flag with explicit egress entries. Approved DNS/NTP, declared dependencies, and replies to permitted inbound connections remain available independently. See the [outbound port examples](firewall-roles.md#outbound-internet-ports).
 
 The optional top-level `http_proxy_name` selects a shared HTTP forward proxy. The example's `http-proxy` VM has outbound TCP 80/443, and every other declared VM receives TCP 3128 access to it. Install Squid after provisioning and configure clients to use its proxy URL; see the [shared proxy reference](firewall-roles.md#shared-http-forward-proxy).
 
@@ -38,6 +38,51 @@ make check
 Replace every illustrative address, ID, SSH key, template, datastore, and NTP target. Both environments use separate state. Keep state and plans on an encrypted, backed-up workstation. Sensitive Terraform values still appear in state and saved plans. Run only one writer against Pi-hole and use `-parallelism=1` for the home environment.
 
 Leave new guests `started = false` and `on_boot = false`. Set `manage_host_firewall = true` only after reviewing/importing the existing full node rule list and datacenter/node settings: Terraform will own those resources. Otherwise establish equivalent host protection separately. The generated policy is visible through `terraform output host_policy`. Preserve the bootstrap administrator `/32` until admin VPN access works.
+
+## LXC guests and storage
+
+Keep VM and container entries together in `guests`. Omitting `type` selects a VM. Set the renamed global `vm_template_id` to your existing QEMU template ID; it is required only when VM entries exist. For containers, configure a downloaded OS template archive at the top level:
+
+```hcl
+vm_template_id = 9000
+lxc_template = {
+  file_id = "local:vztmpl/REPLACE_WITH_DOWNLOADED_TEMPLATE.tar.zst"
+  os_type = "debian"
+}
+```
+
+Use the exact archive ID shown by `pveam list local` (or your template datastore). Terraform references that existing archive; it does not download one. `os_type` defaults to `debian` and must match its supported distribution. `unmanaged` is excluded so Proxmox can configure the container's networking. A VM-only inventory may leave `lxc_template = null`; an all-LXC inventory may omit `vm_template_id`.
+
+For example, add this entry inside `guests`, choosing an unused ID, slot and VNet:
+
+```hcl
+files = {
+  type       = "lxc"
+  vm_id      = 1008
+  slot       = 8
+  vnet_id    = "hsp1008"
+  cores      = 1
+  memory_mb  = 512
+  disk_gb    = 8
+  mount_points = [
+    { path = "/srv/data", size_gb = 50 },
+    { path = "/srv/cache", size_gb = 8, datastore_id = "local-lvm", backup = false },
+  ]
+  dns = { files = { mode = "direct" } }
+}
+```
+
+`vm_id` remains the shared Proxmox VM/CT identifier. IDs and slots are unique across both types. Every guest has its own VNet and `/30`; a `/24` supports 64 guests total, including both VMs and LXCs. Roles, DNS aliases, global/per-guest egress, bootstrap SSH, LAN HTTPS, and explicit dependencies work across types.
+
+`disk_gb` sizes the root filesystem. Each optional mount allocates a new managed volume with a positive integer `size_gb` in GiB and a unique, normalized absolute `path` inside the container. Paths cannot be `/`, contain empty/`.`/`..` components, whitespace, commas, equals, or backslashes. Mounts default to the global `datastore_id`, with an optional storage-ID override. Host bind paths and existing volume references are excluded. These options map to the pinned provider's [container resource](https://github.com/bpg/terraform-provider-proxmox/blob/v0.118.1/docs/resources/virtual_environment_container.md).
+
+Mounts are ordered as `mp0`, `mp1`, etc. Append new entries and preserve existing order. Review resizing, reordering, removal, and guest destruction carefully; storage data is not automatically retained by this module. Deletion of unrelated/unreferenced disks is disabled. Choose storage that supports LXC rootfs and managed container volumes.
+
+Each mount's `backup` defaults to `true`, overriding the provider's false default. LXC root filesystems have no equivalent to the VM disk backup toggle: guest-level `backup = false` is rejected. To omit an entire LXC from backups, exclude its ID in the separately managed backup job. A mount's `backup = false` excludes that extra volume only. See [Proxmox container backup behavior](https://github.com/proxmox/pve-docs/blob/master/vzdump.adoc).
+
+Containers are unprivileged, with nesting, FUSE, keyctl and mknod features disabled. They share the host kernel, so their host isolation differs from a VM even though network policy is shared. This module does not configure nested Docker, host devices, or custom ID maps. The supplied SSH keys are installed for `root`, rather than creating the VM's `ward` user. Use `ssh root@<container-IP>` when an SSH server is available, or bootstrap through the Proxmox console. New containers stay stopped without autostart until inspected and explicitly activated.
+
+For existing deployments, rename `template_id` to `vm_template_id` in your private tfvars. A `moved` block migrates the existing VM resource address to its new `[0]` index without recreating it; existing network, firewall and DNS resource addresses remain. Inspect the plan for moves rather than replacements. Changing an existing entry's `type` does not convert its filesystem: create a new guest with a new ID/slot and migrate the workload/data separately. Changing a template can require replacement.
 
 ## Apply Proxmox host routing
 
@@ -88,7 +133,7 @@ The route makes guests reachable at Layer 3 from the LAN. Host and guest firewal
 
 ## Start inspected guests
 
-Set only the inspected guests to `started = true`, then repeat the normal plan/apply commands. Keep first provisioning and first start in separate applies: VM creation and its sibling firewall resources are not an atomic transaction. There is no additional automated activation guard. Set `on_boot = true` only after reboot-persistence checks pass.
+Set only the inspected guests to `started = true`, then repeat the normal plan/apply commands. Keep first provisioning and first start in separate applies: VM/LXC creation and its sibling firewall resources are not an atomic transaction. There is no additional automated activation guard. Set `on_boot = true` only after reboot-persistence checks pass.
 
 Install VPN/proxy software through your normal configuration process. The admin VPN has explicit management/guest SSH access; the family VPN has HTTPS to the private proxy plus approved DNS/NTP and any configured internet egress. VPN gateways must authenticate peers, prevent spoofing, and SNAT clients to their respective gateway IPs in this model. Configure reverse proxy routes and TLS separately. DNS records alone do not configure a proxy.
 
@@ -104,6 +149,8 @@ ssh ward@10.77.0.2
 
 Your workstation's source IP must match an entry in `bootstrap_admin_cidrs`, and the guest image must provide a running SSH server. Once VPN access works, set `bootstrap = false` and apply again to remove the bootstrap SSH rule. The administrator list continues to control the separate Proxmox host allowances when host firewall management is enabled.
 
+LXC guests use the same bootstrap firewall flag, but their supplied keys belong to `root`. Connect as `root` rather than `ward`, or use the Proxmox console if the archive does not provide an SSH server.
+
 ## Live acceptance and removal
 
 Before migrating real services, verify:
@@ -117,6 +164,7 @@ Before migrating real services, verify:
 - Unallocated aggregate addresses terminate locally. Host reboot restores routing and filtering before workload autostart.
 - Direct/proxy DNS aliases resolve correctly; updates and deletion preserve unrelated records.
 - Removing a disposable guest cleans up its DNS, firewall, subnet, and VNet, leaves no staged SDN changes, and produces a subsequent empty plan.
+- Repeat isolation, source-spoofing, dependency, DNS, mount ownership/size and backup checks with a disposable LXC, including VM-to-LXC and LXC-to-VM traffic.
 - Once VPNs/proxies are configured, admin and family clients have their intended distinct access.
 
 Remove guests through a reviewed Terraform plan. Do not reuse IDs/slots until cleanup is verified. Keep the routing foundation while guests or router routes depend on it.
