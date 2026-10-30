@@ -8,6 +8,8 @@ Top-level `internet_egress_ports` applies to every VM and is combined with each 
 
 The optional top-level `http_proxy_name` selects a shared HTTP forward proxy. The example's `http-proxy` VM has outbound TCP 80/443, and every other declared VM receives TCP 3128 access to it. Install Squid after provisioning and configure clients to use its proxy URL; see the [shared proxy reference](firewall-roles.md#shared-http-forward-proxy).
 
+Set top-level `service_access_cidrs` to trusted LAN subnets for direct HTTPS access to the guest selected by `private_proxy_name`. It defaults to `[]` and grants only TCP 443 to that private proxy. Squid and management access are separate; see [LAN access to private services](firewall-roles.md#lan-access-to-private-services).
+
 ## Prerequisites
 
 Record the real node name, VE patch version/firewall backend, host LAN IP, bridges, protected LAN/VPN ranges, storage, and an unused private platform range. Use the same aggregate in both environments. A `/24` holds 64 `/30` guest networks. Keep explicit slots and VM/VNet IDs stable when adding or deleting guests.
@@ -110,6 +112,7 @@ Before migrating real services, verify:
 - Explicit guest/IP dependencies work only on their declared destination addresses and ports; approved DNS and NTP work. General internet access uses the combined global and per-guest egress ports; with both lists empty, only explicit dependencies and infrastructure exceptions remain permitted.
 - Bootstrap adds SSH access only from the listed administrator `/32` addresses. Disabling it removes that exception; other guests retain their existing policies.
 - Only LAN subnets in `public_ports_lan_cidrs` can use the public-port exceptions. Other ports retain their restrictions. Verify effective host rules, including Proxmox's implicit management allowances.
+- LAN sources in `service_access_cidrs` can reach the selected private proxy on TCP 443. This setting must not open Squid, SSH, other private proxies, or backend VMs; removing the list removes its HTTPS exception.
 - An external EdgeRouter-forwarded connection receives replies. Check observed source addresses and SDN SNAT behavior.
 - Unallocated aggregate addresses terminate locally. Host reboot restores routing and filtering before workload autostart.
 - Direct/proxy DNS aliases resolve correctly; updates and deletion preserve unrelated records.

@@ -25,6 +25,7 @@ module "service" {
   ntp_servers            = var.ntp_servers
   ssh_public_keys        = var.ssh_public_keys
   public_ports_lan_cidrs = var.public_ports_lan_cidrs
+  service_access_cidrs   = each.key == var.private_proxy_name ? var.service_access_cidrs : []
   guest = {
     name                  = each.key, vm_id = each.value.vm_id, template_id = var.template_id, datastore_id = var.datastore_id,
     started               = each.value.started, on_boot = each.value.on_boot, cores = each.value.cores,

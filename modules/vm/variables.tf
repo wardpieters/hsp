@@ -99,6 +99,16 @@ variable "public_ports_lan_cidrs" {
     error_message = "Public-port LAN sources must be canonical IPv4 CIDRs narrower than /0."
   }
 }
+variable "service_access_cidrs" {
+  description = "LAN IPv4 subnets allowed to reach this VM on TCP 443 before protected-source drops."
+  type        = list(string)
+  default     = []
+  nullable    = false
+  validation {
+    condition     = alltrue([for c in var.service_access_cidrs : try(cidrnetmask(c) != "" && cidrhost(c, 0) == split("/", c)[0] && tonumber(split("/", c)[1]) > 0, false)])
+    error_message = "Service-access sources must be canonical IPv4 CIDRs narrower than /0."
+  }
+}
 variable "public_ports" {
   type    = list(object({ protocol = string, port = number }))
   default = []

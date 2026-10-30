@@ -21,6 +21,11 @@ variable "public_ports_lan_cidrs" {
   default  = []
   nullable = false
 }
+variable "service_access_cidrs" {
+  type     = list(string)
+  default  = []
+  nullable = false
+}
 
 module "vm" {
   source                 = "../vm"
@@ -43,6 +48,7 @@ module "vm" {
   internet_egress_ports  = var.guest.internet_egress_ports
   public_ports           = var.guest.public_ports
   public_ports_lan_cidrs = var.public_ports_lan_cidrs
+  service_access_cidrs   = var.service_access_cidrs
   allow_rules            = var.guest.allow_rules
 }
 module "dns" {

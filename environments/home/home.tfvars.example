@@ -10,6 +10,7 @@ platform_cidr        = "10.77.0.0/24"
 protected_cidrs      = ["192.168.50.0/24", "10.78.0.0/24", "10.79.0.0/24"]
 bootstrap_admin_cidrs = ["192.168.50.42/32"]
 public_ports_lan_cidrs = ["192.168.50.0/24"] # LAN access to each VM's public_ports; default [].
+service_access_cidrs = ["192.168.50.0/24"] # Private proxy TCP 443 only; default [].
 manage_host_firewall = false # Opt in only after reviewing/importing existing rules.
 dns_servers         = ["192.168.50.53"]
 ntp_servers         = [] # Use the guest's configured NTP pool instead of fixed-IP exceptions.

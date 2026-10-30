@@ -90,6 +90,101 @@ run "reject_guest_network_as_public_ports_lan" {
   variables { public_ports_lan_cidrs = ["10.77.0.0/25"] }
   expect_failures = [var.public_ports_lan_cidrs]
 }
+run "lan_service_access_is_https_only" {
+  command = plan
+  variables {
+    service_access_cidrs = ["192.168.1.0/24", "192.168.2.0/24", "192.168.1.0/24"]
+    private_proxy_name   = "private"
+    http_proxy_name      = "http-proxy"
+    connections          = []
+    guests = {
+      family     = { vm_id = 1001, slot = 1, vnet_id = "hsp1001", role = "service_vpn" }
+      private    = { vm_id = 1003, slot = 3, vnet_id = "hsp1003", role = "private_proxy" }
+      other      = { vm_id = 1004, slot = 4, vnet_id = "hsp1004", role = "private_proxy" }
+      cloud      = { vm_id = 1005, slot = 5, vnet_id = "hsp1005" }
+      http-proxy = { vm_id = 1006, slot = 6, vnet_id = "hsp1006" }
+    }
+  }
+  assert {
+    condition = length([for r in output.policies["private"] : r if r.action == "ACCEPT" && contains(var.service_access_cidrs, coalesce(r.source, "-"))]) == 2 && toset([for r in output.policies["private"] : "${r.type}:${r.proto}:${r.dport}:${r.source}" if r.action == "ACCEPT" && contains(var.service_access_cidrs, coalesce(r.source, "-"))]) == toset([
+      "in:tcp:443:192.168.1.0/24", "in:tcp:443:192.168.2.0/24"
+    ])
+    error_message = "Each distinct LAN subnet must receive only TCP 443 ingress on the selected private proxy."
+  }
+  assert {
+    condition     = alltrue(flatten([for name, rules in output.policies : [for r in rules : !(r.action == "ACCEPT" && contains(var.service_access_cidrs, coalesce(r.source, "-")))] if name != "private"])) && alltrue([for r in output.host_policy : !(r.action == "ACCEPT" && contains(var.service_access_cidrs, coalesce(r.source, "-")))])
+    error_message = "LAN service access must not open Squid, other private proxies, backend VMs, SSH, or Proxmox management."
+  }
+  assert {
+    condition     = try(alltrue([for i, r in output.policies["private"] : i < index([for rule in output.policies["private"] : rule.comment], "hsp:protect-in:192.168.1.0/24") if r.action == "ACCEPT" && contains(var.service_access_cidrs, coalesce(r.source, "-"))]), false)
+    error_message = "LAN HTTPS exceptions must precede protected-source drops."
+  }
+  assert {
+    condition     = contains([for r in output.policies["private"] : "${r.type}:${r.action}:${coalesce(r.dest, "-")}"], "out:DROP:192.168.1.0/24") && alltrue(flatten([for rules in values(output.policies) : [for r in rules : !(r.type == "out" && r.action == "ACCEPT" && contains(var.service_access_cidrs, coalesce(r.dest, "-")))]]))
+    error_message = "LAN service access must preserve protected-network egress blocks and must not permit VM-initiated LAN access."
+  }
+}
+run "lan_service_access_is_opt_in" {
+  command = plan
+  variables { private_proxy_name = "proxy" }
+  assert {
+    condition     = alltrue(flatten([for rules in values(output.policies) : [for r in rules : !(r.action == "ACCEPT" && r.source == "192.168.1.0/24")]]))
+    error_message = "An omitted service_access_cidrs list must grant no LAN access."
+  }
+}
+run "reject_service_access_default_route" {
+  command = plan
+  variables {
+    private_proxy_name   = "proxy"
+    service_access_cidrs = ["0.0.0.0/0"]
+  }
+  expect_failures = [var.service_access_cidrs]
+}
+run "reject_service_access_noncanonical_subnet" {
+  command = plan
+  variables {
+    private_proxy_name   = "proxy"
+    service_access_cidrs = ["192.168.1.5/24"]
+  }
+  expect_failures = [var.service_access_cidrs]
+}
+run "reject_service_access_ipv6" {
+  command = plan
+  variables {
+    private_proxy_name   = "proxy"
+    service_access_cidrs = ["fd00::/64"]
+  }
+  expect_failures = [var.service_access_cidrs]
+}
+run "reject_service_access_inside_platform" {
+  command = plan
+  variables {
+    private_proxy_name   = "proxy"
+    service_access_cidrs = ["10.77.0.0/25"]
+  }
+  expect_failures = [var.service_access_cidrs]
+}
+run "reject_service_access_containing_platform" {
+  command = plan
+  variables {
+    private_proxy_name   = "proxy"
+    service_access_cidrs = ["10.0.0.0/8"]
+  }
+  expect_failures = [var.service_access_cidrs]
+}
+run "reject_service_access_without_private_proxy" {
+  command = plan
+  variables { service_access_cidrs = ["192.168.1.0/24"] }
+  expect_failures = [var.private_proxy_name]
+}
+run "reject_service_access_to_workload" {
+  command = plan
+  variables {
+    service_access_cidrs = ["192.168.1.0/24"]
+    private_proxy_name   = "cloud"
+  }
+  expect_failures = [var.private_proxy_name]
+}
 run "internet_egress_is_per_guest" {
   command = plan
   variables {

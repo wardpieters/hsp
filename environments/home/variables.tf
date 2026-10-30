@@ -65,6 +65,19 @@ variable "public_ports_lan_cidrs" {
     error_message = "Public-port LAN sources must be canonical IPv4 CIDRs, narrower than /0, and must not overlap platform_cidr."
   }
 }
+variable "service_access_cidrs" {
+  description = "LAN IPv4 subnets allowed to reach the selected private proxy on TCP 443."
+  type        = list(string)
+  default     = []
+  nullable    = false
+  validation {
+    condition = alltrue([for c in var.service_access_cidrs : try(
+      cidrnetmask(c) != "" && cidrhost(c, 0) == split("/", c)[0] && tonumber(split("/", c)[1]) > 0 &&
+      cidrhost("${split("/", c)[0]}/${min(tonumber(split("/", c)[1]), tonumber(split("/", var.platform_cidr)[1]))}", 0) !=
+    cidrhost("${split("/", var.platform_cidr)[0]}/${min(tonumber(split("/", c)[1]), tonumber(split("/", var.platform_cidr)[1]))}", 0), false)])
+    error_message = "Service-access sources must be canonical IPv4 CIDRs, narrower than /0, and must not overlap platform_cidr."
+  }
+}
 variable "manage_host_firewall" {
   description = "Opt in after reviewing/importing the existing full node ruleset. Otherwise configure equivalent host protection before starting guests."
   type        = bool
@@ -98,8 +111,8 @@ variable "private_proxy_name" {
   type    = string
   default = null
   validation {
-    condition     = alltrue([for g in values(var.guests) : g.role != "service_vpn"]) || try(var.guests[var.private_proxy_name].role == "private_proxy", false)
-    error_message = "Service VPN guests require a named private_proxy target."
+    condition     = (length(var.service_access_cidrs) == 0 && alltrue([for g in values(var.guests) : g.role != "service_vpn"])) || try(var.guests[var.private_proxy_name].role == "private_proxy", false)
+    error_message = "Service VPN guests and LAN service access require a named private_proxy target."
   }
 }
 variable "guests" {

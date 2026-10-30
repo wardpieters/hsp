@@ -12,6 +12,9 @@ locals {
       dest    = r.direction == "out" ? r.address : null, proto = r.protocol, dport = r.ports,
       comment = "hsp:allow:${r.description}"
     })],
+    [for cidr in distinct(var.service_access_cidrs) : merge(local.base_rule, {
+      source = cidr, proto = "tcp", dport = "443", comment = "hsp:lan-service:${cidr}"
+    })],
     flatten([for ip in var.dns_servers : [for proto in ["tcp", "udp"] : merge(local.base_rule, {
       type = "out", dest = "${ip}/32", proto = proto, dport = "53", comment = "hsp:dns:${proto}:${ip}"
     })]]),
