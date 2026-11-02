@@ -19,8 +19,20 @@ resource "proxmox_virtual_environment_vm" "this" {
     interface    = "scsi0"
     datastore_id = var.datastore_id
     size         = var.disk_gb
+    ssd          = var.ssd
     discard      = "on"
     backup       = var.backup
+  }
+  dynamic "disk" {
+    for_each = var.extra_disks
+    content {
+      interface    = disk.key
+      datastore_id = disk.value.datastore_id == null ? var.datastore_id : disk.value.datastore_id
+      size         = disk.value.size_gb
+      ssd          = disk.value.ssd
+      discard      = "on"
+      backup       = disk.value.backup
+    }
   }
   agent {
     enabled = true

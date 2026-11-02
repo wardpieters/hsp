@@ -29,7 +29,8 @@ private_proxy_name  = "proxy-private"
 http_proxy_name     = "http-proxy" # Every other guest may reach this VM on TCP 3128.
 
 # New guests start stopped, without autostart. Configure VPN/proxy software later.
-# VMs default to backup = true; set backup = false to exclude their disk.
+# VMs default to backup = true; set backup = false to exclude the root disk.
+# Extra VM disks each default to backup = true independently of the root disk.
 # LXC rootfs backups follow job selection; configure extra-volume backups per mount.
 # Per-VM internet egress adds to the global list, e.g. [{ protocol = "tcp", port = 443 }].
 guests = {
@@ -55,6 +56,13 @@ guests = {
   }
   cloud = {
     vm_id = 1004, slot = 4, vnet_id = "hsp114"
+    ssd = true # VM root-disk SSD emulation; defaults to false.
+    # VM-only new data volumes. Keep interface keys stable; scsi0 is the root.
+    # Format and mount these disks inside the VM after provisioning.
+    extra_disks = {
+      scsi1 = { size_gb = 100, ssd = true } # Uses datastore_id; included in backups.
+      # scsi2 = { size_gb = 8, datastore_id = "fast-lvm", backup = false }
+    }
     dns = { cloud = { mode = "proxy", proxy_name = "proxy-private" }, cloud-host = { mode = "direct" } }
     internet_egress_ports = []
   }

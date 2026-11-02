@@ -2,7 +2,7 @@
 
 The [role and firewall reference](firewall-roles.md) lists all guest roles, automatic permissions, shared rules, and the effects of `public_ports`, `connections`, and `internet_egress_ports`.
 
-VM guests accept `backup` in `home.tfvars`, defaulting to `true`. Set `backup = false` inside a VM's entry to exclude its managed `scsi0` disk from Proxmox backups. LXC root filesystems follow backup-job selection and reject this flag when false; extra mount volumes have their own backup flags. Backup-job schedules and any separate configuration-only backups are managed outside this configuration.
+VM guests accept `backup` in `home.tfvars`, defaulting to `true`. Set `backup = false` inside a VM's entry to exclude its managed `scsi0` disk from Proxmox backups. Extra VM disks each have their own `backup` flag, defaulting to `true` independently of the root disk. LXC root filesystems follow backup-job selection and reject the guest-level flag when false; extra mount volumes have their own backup flags. Backup-job schedules and any separate configuration-only backups are managed outside this configuration.
 
 Top-level `internet_egress_ports` applies to every VM and LXC and is combined with each guest's own list; both default to `[]`. Declare shared TCP/UDP destination ports globally and add VM-specific ports inside guest entries. The example allows global UDP 123 for Debian NTP pools and uses `ntp_servers = []` to remove fixed-IP NTP exceptions. Replace the former `allow_updates` flag with explicit egress entries. Approved DNS/NTP, declared dependencies, and replies to permitted inbound connections remain available independently. See the [outbound port examples](firewall-roles.md#outbound-internet-ports).
 
@@ -40,6 +40,52 @@ make check
 Replace every illustrative address, ID, SSH key, template, datastore, and NTP target. Both environments use separate state. Keep state and plans on an encrypted, backed-up workstation. Sensitive Terraform values still appear in state and saved plans. Run only one writer against Pi-hole and use `-parallelism=1` for the home environment.
 
 Leave new guests `started = false` and `on_boot = false`. Set `manage_host_firewall = true` only after reviewing/importing the existing full node rule list and datacenter/node settings: Terraform will own those resources. Otherwise establish equivalent host protection separately. The generated policy is visible through `terraform output host_policy`. Preserve the bootstrap administrator `/32` until admin VPN access works.
+
+## Extra VM disks
+
+For VM guests, `disk_gb` sizes the root disk at `scsi0`. Use `extra_disks`
+inside a guest's entry for separate data disks; `mount_points` is LXC-only.
+For example, inside `guests`:
+
+```hcl
+cloud = {
+  vm_id = 1004, slot = 4, vnet_id = "hsp114"
+  disk_gb = 16
+  ssd = true # SSD emulation for the scsi0 root disk.
+  extra_disks = {
+    scsi1 = { size_gb = 100, ssd = true }
+    scsi2 = { size_gb = 8, datastore_id = "fast-lvm", backup = false }
+  }
+}
+```
+
+Keys must be `scsi1` through `scsi30`; `scsi0` is reserved for the root disk.
+Use a template with its cloud-init drive at `ide2` and no data disks occupying
+the requested SCSI interfaces. Each disk requires a positive integer
+`size_gb` in GiB. Omit `datastore_id` to use the guest's datastore or supply a
+Proxmox storage ID. Host paths, physical disk passthrough and existing-volume
+references are not supported. The map defaults to `{}` and is VM-only.
+
+Guest-level `ssd` controls SSD emulation for the boot/root disk at `scsi0`.
+Set `ssd` separately inside each extra disk to control its emulation flag.
+Both default to `false` independently: `ssd = true` on the guest does not
+enable it for extra disks. This flag changes how the disk is presented to
+the VM; it does not select SSD-backed storage or change the datastore.
+LXC root filesystems do not support this flag; enabling it on an LXC guest
+is rejected.
+
+Each disk's `backup` defaults to `true`, even when the guest has
+`backup = false` for its root disk. Terraform allocates and attaches these
+volumes using the pinned provider's [VM disk blocks](https://github.com/bpg/terraform-provider-proxmox/blob/v0.118.1/docs/resources/virtual_environment_vm.md#argument-reference).
+Partition, format and mount new disks inside the VM separately. Identify the
+new, empty disk with `lsblk -f` before formatting it, and use its filesystem
+UUID in `/etc/fstab` for a persistent mount such as `/srv/data`.
+
+Keep existing interface keys stable when adding disks. Review resizing,
+renaming keys, removing disks and destroying guests carefully in the plan;
+storage data is not automatically retained by this module. Back up data
+before making storage changes. No automatic guest formatting or mounting is
+performed.
 
 ## LXC guests and storage
 

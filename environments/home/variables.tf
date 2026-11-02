@@ -163,6 +163,8 @@ variable "guests" {
     bootstrap             = optional(bool, false),
     cores                 = optional(number, 2), memory_mb = optional(number, 2048), disk_gb = optional(number, 16),
     backup                = optional(bool, true),
+    ssd                   = optional(bool, false),
+    extra_disks           = optional(map(object({ size_gb = number, datastore_id = optional(string), backup = optional(bool, true), ssd = optional(bool, false) })), {}),
     mount_points          = optional(list(object({ path = string, size_gb = number, datastore_id = optional(string), backup = optional(bool, true) })), []),
     internet_egress_ports = optional(list(object({ protocol = string, port = number })), []),
     public_ports          = optional(list(object({ protocol = string, port = number })), []),

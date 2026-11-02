@@ -10,6 +10,8 @@ Top-level `internet_egress_ports` allows outbound TCP/UDP ports for every guest.
 
 Guests default to `type = "vm"`, using the global `vm_template_id` (renamed from `template_id`). Set `type = "lxc"` to use the global `lxc_template` OS archive and optional `mount_points = [{ path = "/srv/data", size_gb = 50 }]`. Containers are unprivileged and use the same roles, DNS and firewall rules. See [LXC configuration and storage](docs/deployment.md#lxc-guests-and-storage) for the full example, backup behavior, and migration notes. The current `/24` supports 64 guests total across both types.
 
+VM guests can allocate separate data disks with `extra_disks = { scsi1 = { size_gb = 100, ssd = true } }`. Each disk defaults to the guest datastore and `backup = true`; format and mount it inside the VM after provisioning. Set guest-level `ssd = true` for root-disk SSD emulation, or `ssd` inside each extra disk; both default independently to `false`. See [extra VM disks](docs/deployment.md#extra-vm-disks) for storage overrides and lifecycle guidance.
+
 For raw LXC bind mounts and cgroup2 rules, configure per-guest `lxc_mounts` and `lxc_cgroups` plus host `proxmox_ssh` access. See the [GPU mount example](docs/deployment.md#raw-lxc-mounts-and-cgroups-over-ssh).
 
 For example, inside a guest declaration:

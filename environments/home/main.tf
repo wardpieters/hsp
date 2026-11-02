@@ -42,6 +42,8 @@ module "service" {
     started               = each.value.started, on_boot = each.value.on_boot, cores = each.value.cores,
     memory_mb             = each.value.memory_mb, disk_gb = each.value.disk_gb,
     backup                = each.value.backup,
+    ssd                   = each.value.ssd,
+    extra_disks           = each.value.extra_disks,
     internet_egress_ports = distinct(concat(var.internet_egress_ports, each.value.internet_egress_ports)),
     public_ports          = each.value.public_ports, allow_rules = local.allow_rules[each.key],
     dns                   = { for d in local.dns_entries : d.name => { mode = d.mode, proxy_address = d.proxy_address } if d.guest == each.key }

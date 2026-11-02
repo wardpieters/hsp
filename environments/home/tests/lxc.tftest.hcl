@@ -27,7 +27,10 @@ variables {
   http_proxy_name        = "files"
   public_ports_lan_cidrs = ["192.168.1.0/24"]
   guests = {
-    proxy = { vm_id = 1000, slot = 0, vnet_id = "hsp1000", role = "private_proxy" }
+    proxy = { vm_id = 1000, slot = 0, vnet_id = "hsp1000", role = "private_proxy", backup = false, ssd = true, extra_disks = {
+      scsi1 = { size_gb = 100, ssd = true }
+      scsi3 = { size_gb = 8, datastore_id = "fast-lvm", backup = false }
+    } }
     files = { type = "lxc", vm_id = 1001, slot = 1, vnet_id = "hsp1001", bootstrap = true, mount_points = [{ path = "/srv/data", size_gb = 50 }], dns = { files = { mode = "proxy", proxy_name = "proxy" }, files-host = { mode = "direct" } } }
     vpn   = { type = "lxc", vm_id = 1002, slot = 2, vnet_id = "hsp1002", role = "service_vpn", public_ports = [{ protocol = "udp", port = 51820 }] }
   }

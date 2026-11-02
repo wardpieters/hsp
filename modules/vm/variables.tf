@@ -149,8 +149,34 @@ variable "disk_gb" {
   type    = number
   default = 16
 }
+variable "ssd" {
+  description = "Enable SSD emulation for the VM root disk. Extra disks have independent SSD flags."
+  type        = bool
+  default     = false
+  nullable    = false
+  validation {
+    condition     = !var.ssd || var.guest_type == "vm"
+    error_message = "ssd can only be enabled for VM guests; LXC root filesystems do not support SSD emulation."
+  }
+}
+variable "extra_disks" {
+  description = "VM-only managed data disks keyed by scsi1 through scsi30. Sizes are GiB; storage defaults to datastore_id and backups default to true independently of the root disk."
+  type        = map(object({ size_gb = number, datastore_id = optional(string), backup = optional(bool, true), ssd = optional(bool, false) }))
+  default     = {}
+  nullable    = false
+  validation {
+    condition = try(
+      (var.guest_type == "vm" || length(var.extra_disks) == 0) &&
+      alltrue([for interface, disk in var.extra_disks :
+        can(regex("^scsi([1-9]|[12][0-9]|30)$", interface)) &&
+        disk.size_gb > 0 && floor(disk.size_gb) == disk.size_gb &&
+        can(regex("^[A-Za-z][A-Za-z0-9_-]*$", disk.datastore_id == null ? var.datastore_id : disk.datastore_id))
+    ]), false)
+    error_message = "extra_disks is VM-only: use scsi1 through scsi30 (scsi0 is the root disk), positive integer size_gb in GiB, and storage IDs instead of host paths or existing volumes."
+  }
+}
 variable "backup" {
-  description = "Include the managed VM disk in Proxmox backups."
+  description = "Include the managed VM root disk in Proxmox backups. Extra disks have independent backup flags."
   type        = bool
   default     = true
   validation {

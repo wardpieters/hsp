@@ -8,6 +8,8 @@ variable "guest" {
     started               = optional(bool, false), on_boot = optional(bool, false), cores = optional(number, 2),
     memory_mb             = optional(number, 2048), disk_gb = optional(number, 16),
     backup                = optional(bool, true),
+    ssd                   = optional(bool, false),
+    extra_disks           = optional(map(object({ size_gb = number, datastore_id = optional(string), backup = optional(bool, true), ssd = optional(bool, false) })), {}),
     mount_points          = optional(list(object({ path = string, size_gb = number, datastore_id = optional(string), backup = optional(bool, true) })), []),
     internet_egress_ports = optional(list(object({ protocol = string, port = number })), []),
     public_ports          = optional(list(object({ protocol = string, port = number })), []),
@@ -60,6 +62,8 @@ module "vm" {
   cores                  = var.guest.cores
   memory_mb              = var.guest.memory_mb
   disk_gb                = var.guest.disk_gb
+  ssd                    = var.guest.ssd
+  extra_disks            = var.guest.extra_disks
   backup                 = var.guest.backup
   protected_cidrs        = var.protected_cidrs
   dns_servers            = var.dns_servers
