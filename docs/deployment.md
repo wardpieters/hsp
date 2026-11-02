@@ -200,8 +200,6 @@ Writing the unit file alone does not execute it. The service resource enables an
 
 Each guest's `dns` map is passed to `modules/dns_records`, which manages `pihole_dns_record` resources through Pi-hole's local DNS API. `direct` resolves to the guest IP; `proxy` resolves to a declared proxy guest (`proxy_name`) or an external proxy IP (`proxy_address`); `none` creates no record. The inventory example shows both direct and proxy aliases. Removing an alias removes its Terraform-owned record.
 
-The configuration no longer manages a wildcard or any Pi-hole host file. Remove the obsolete `pihole_ssh` and `wildcard_proxy_address` entries if you copied an older `hosts.tfvars` example.
-
 To migrate from the existing wildcard, first declare or import all names currently relying on it and verify their explicit records. Then back up and remove the old wildcard at its current source, validate the Pi-hole configuration, and reload it using the installed version's procedure. Terraform does not remove that existing unmanaged directive. If an earlier version of this configuration was applied, remove its `conf-file=/etc/pihole/hsp-dns.conf` include before applying a plan that deletes that file.
 
 ## Provision stopped guests

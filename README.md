@@ -23,7 +23,7 @@ dns = {
 }
 ```
 
-The `dns_records` module creates `cloud.home.ward.nl` pointing to the declared private proxy and `cloud-host.home.ward.nl` pointing to this guest, using Pi-hole's local DNS API. Every desired name is explicit; no wildcard, Pi-hole host file, or Pi-hole SSH access is needed.
+The `dns_records` module creates `cloud.{{HSP_DOMAIN}}` pointing to the declared private proxy and `cloud-host.{{HSP_DOMAIN}}` pointing to this guest, using Pi-hole's local DNS API. Every desired name is explicit; no wildcard, Pi-hole host file, or Pi-hole SSH access is needed.
 
 | Configuration | Resources |
 | --- | --- |

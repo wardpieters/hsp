@@ -13,3 +13,14 @@ jobs:
           terraform_wrapper: false
       - run: make init
       - run: make check
+  documentation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - run: make docs-install
+      - run: make docs-build

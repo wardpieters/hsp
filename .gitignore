@@ -18,4 +18,9 @@ override.tf.json
 .worktrees/
 .DS_Store
 
+# Docusaurus dependencies and generated documentation
+website/node_modules/
+website/.docusaurus/
+website/build/
+
 modules/**/.terraform.lock.hcl

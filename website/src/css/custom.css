@@ -1,0 +1,38 @@
+:root {
+  --ifm-color-primary: #1b6b62;
+  --ifm-color-primary-dark: #186058;
+  --ifm-color-primary-darker: #175b53;
+  --ifm-color-primary-darkest: #134b45;
+  --ifm-color-primary-light: #1e766c;
+  --ifm-color-primary-lighter: #1f7b71;
+  --ifm-color-primary-lightest: #238b7f;
+  --ifm-font-family-base: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --ifm-heading-font-weight: 650;
+  --ifm-line-height-base: 1.75;
+  --ifm-code-font-size: 90%;
+  --ifm-global-radius: 0.5rem;
+  --doc-sidebar-width: 290px;
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #72d4be;
+  --ifm-color-primary-dark: #56cbb2;
+  --ifm-color-primary-darker: #48c7ac;
+  --ifm-color-primary-darkest: #32aa90;
+  --ifm-color-primary-light: #8edcca;
+  --ifm-color-primary-lighter: #9ce1d0;
+  --ifm-color-primary-lightest: #c5eee4;
+  --ifm-background-color: #131c20;
+  --ifm-background-surface-color: #1b272c;
+}
+
+.navbar__title { letter-spacing: -0.03em; }
+.markdown h1 { letter-spacing: -0.04em; }
+.markdown h2 { margin-top: 2.5rem; letter-spacing: -0.02em; }
+.markdown table { font-size: 0.93rem; }
+.menu__link { line-height: 1.5; }
+.footer { margin-top: 3rem; }
+
+@media (min-width: 997px) {
+  .theme-doc-markdown { padding: 0.75rem 0.5rem; }
+}

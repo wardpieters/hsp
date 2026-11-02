@@ -131,7 +131,7 @@ Initial guest support is QEMU VMs, including VMs that can later host application
 
 ## DNS management
 
-Use Pi-hole v6's API for explicit A records. A name configured as `direct` resolves to its guest address; a name configured as `proxy` resolves to the selected proxy address. Multiple aliases may use different modes. Names are restricted to `home.ward.nl`, are unique across the inventory, and cannot simultaneously be A and CNAME records.
+Use Pi-hole v6's API for explicit A records. A name configured as `direct` resolves to its guest address; a name configured as `proxy` resolves to the selected proxy address. Multiple aliases may use different modes. Names are restricted to `{{HSP_DOMAIN}}`, are unique across the inventory, and cannot simultaneously be A and CNAME records.
 
 Prefer explicit A records initially; CNAME support is optional, not a requirement. Proxy routing and TLS are separate from DNS. A DNS change alone does not create a proxy route or grant network access.
 

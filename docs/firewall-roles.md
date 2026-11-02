@@ -134,13 +134,13 @@ internet_egress_ports = [
 
 ### Shared HTTP forward proxy
 
-Set the top-level `http_proxy_name = "http-proxy"` to select a declared guest. The inventory example gives that guest guest ID 1006, slot 6 (`10.77.0.26`), a direct `http-proxy.home.ward.nl` DNS record, and its own outbound TCP 80/443 allowance. Its `public_ports` is empty. All guests inherit global UDP 123 for NTP; other guests have empty per-guest egress lists and can use `http://http-proxy.home.ward.nl:3128` for web requests after Squid and their proxy settings are configured.
+Set the top-level `http_proxy_name = "http-proxy"` to select a declared guest. The inventory example gives that guest guest ID 1006, slot 6 (`10.77.0.26`), a direct `http-proxy.{{HSP_DOMAIN}}` DNS record, and its own outbound TCP 80/443 allowance. Its `public_ports` is empty. All guests inherit global UDP 123 for NTP; other guests have empty per-guest egress lists and can use `http://http-proxy.{{HSP_DOMAIN}}:3128` for web requests after Squid and their proxy settings are configured.
 
 This grants proxied web access to all declared guests, including the family VPN guest. Squid must listen on TCP 3128 and apply appropriate client and destination ACLs. Terraform provisions the guest and firewall/DNS rules; install Squid and configure proxy use inside clients separately. Access to the proxy is explicit HTTP proxying, rather than automatic redirection of all guest traffic. Proxmox blocks the proxy's connections to protected destinations except declared dependencies and narrow infrastructure exceptions. An IP dependency from `http-proxy` also allows Squid to relay matching requests for its clients, subject to its ACLs.
 
 For client configuration, follow [Debian guest setup](debian-setup.md) for login environment variables, APT downloads, and Docker Engine proxy and logging settings.
 
-DNS target selection and firewall dependencies are configured separately. For example, pointing `web.home.ward.nl` at `proxy-private` also requires an appropriate `proxy-private` → `web` backend connection and a corresponding proxy route. A DNS alias alone adds no firewall exception.
+DNS target selection and firewall dependencies are configured separately. For example, pointing `web.{{HSP_DOMAIN}}` at `proxy-private` also requires an appropriate `proxy-private` → `web` backend connection and a corresponding proxy route. A DNS alias alone adds no firewall exception.
 
 ## Guest rule order
 
