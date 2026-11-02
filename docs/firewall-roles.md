@@ -41,7 +41,7 @@ The protected ranges include the platform aggregate, `host_address/32`, all conf
 
 | Setting | Generated behavior |
 | --- | --- |
-| `connections` | `from` names a declared guest. `to` accepts another guest name or a bare IPv4 address outside `platform_cidr`. Named destinations get paired outgoing/incoming rules; IPv4 destinations get only an outgoing `/32` rule on the source guest. Each exception is limited to its TCP/UDP destination port and precedes protected-network drops. Service VPN destination restrictions still apply. |
+| `connections` | Connects two declared guests, a guest to an external bare IPv4 address, or an external IPv4 host to a guest. External sources accept a bare address or `/32` suffix; all external addresses must be outside `platform_cidr`. Guest pairs get outgoing/incoming rules; external destinations get only guest egress, and external sources get only guest ingress. Each exception is limited to its TCP/UDP destination port and precedes protected-network drops. Service VPN destination restrictions still apply. |
 | `bootstrap = true` | On that guest only, allows incoming TCP 22 from each IPv4 `/32` in `bootstrap_admin_cidrs`, before protected-source blocks. Available to every role and defaults to `false`. Set it back to `false` and apply after setup to remove the exception. Guest bootstrap works independently of `manage_host_firewall`. |
 | `public_ports` | Allows incoming TCP/UDP on each listed destination port from `0.0.0.0/0`, after protected-source blocks. There is no public source-IP allowlist. Ports 22 and 8006 are rejected for every role; `private_proxy` and `management` reject all public ports. Defaults to empty. |
 | `public_ports_lan_cidrs` | Top-level IPv4 subnet list in `home.tfvars`, default `[]`. These LAN sources may reach each guest's declared `public_ports` before protected-source drops. guests without public ports receive no exception. Subnets must be canonical, narrower than `/0`, and must not overlap `platform_cidr`. |
@@ -66,6 +66,19 @@ connections = [
 This allows `http-proxy` to initiate connections to that single address on TCP 80/443, including when it is inside a protected private range. Other destination addresses and ports retain their existing restrictions. The remote server's firewall and network routes are managed separately. Remove the temporary entries and apply after migration.
 
 Use declared guest names for destinations inside `platform_cidr` so Terraform can configure both guests' firewalls. IP destinations accept bare IPv4 addresses, without CIDR suffixes; subnets, hostnames, and IPv6 are not supported. The `service_vpn` role remains restricted to its selected private and HTTP proxies.
+
+### Access from an external host
+
+Use an external IPv4 address as `from` and a declared guest name as `to` to allow that host to initiate a connection:
+
+```hcl
+connections = [
+  # Keep existing connections here too.
+  { from = "192.168.50.42/32", to = "cloud", protocol = "tcp", port = 443 },
+]
+```
+
+This adds incoming TCP 443 on `cloud` from only `192.168.50.42/32`, before protected-source drops. A bare source address such as `192.168.50.42` has the same effect. Sources must be outside `platform_cidr`; wider subnets, IPv6, hostnames, and connections between two external addresses are rejected. Replies use the stateful firewall; the guest receives no permission to initiate connections to the external host. Routes and the external host's firewall are managed separately.
 
 ### LAN access to public ports
 

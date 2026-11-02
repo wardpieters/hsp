@@ -21,7 +21,7 @@ locals {
       ports     = tostring(c.port), description = "${c.from}->${c.to}:${c.port}"
     } if c.from == name],
     [for c in local.connections : {
-      direction = "in", address = "${module.network.networks[c.from].address}/32", protocol = c.protocol,
+      direction = "in", address = "${trimsuffix(try(module.network.networks[c.from].address, c.from), "/32")}/32", protocol = c.protocol,
       ports     = tostring(c.port), description = "${c.from}->${c.to}:${c.port}"
     } if c.to == name],
     g.role == "admin_vpn" ? [{

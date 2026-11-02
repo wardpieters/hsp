@@ -87,6 +87,8 @@ guests = {
 connections = [
   { from = "proxy-private", to = "cloud", protocol = "tcp", port = 8080 },
   { from = "proxy-public", to = "web", protocol = "tcp", port = 8080 },
+  # Allow one external host to reach a guest:
+  # { from = "192.168.50.42/32", to = "cloud", protocol = "tcp", port = 443 },
   # Temporary migration access to a server outside this inventory:
   # { from = "http-proxy", to = "172.16.10.30", protocol = "tcp", port = 80 },
   # { from = "http-proxy", to = "172.16.10.30", protocol = "tcp", port = 443 },

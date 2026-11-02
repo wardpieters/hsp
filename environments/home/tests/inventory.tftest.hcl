@@ -72,6 +72,80 @@ run "literal_ipv4_migration_connections" {
     error_message = "Named guest connections must retain their paired egress and ingress rules alongside IP destinations."
   }
 }
+run "external_host_ingress_connections" {
+  command = plan
+  variables {
+    bootstrap_admin_cidrs = ["192.168.1.99/32"]
+    connections = [
+      { from = "proxy", to = "cloud", protocol = "tcp", port = 8080 },
+      { from = "192.168.1.42/32", to = "cloud", protocol = "tcp", port = 443 },
+      { from = "192.168.1.43", to = "cloud", protocol = "udp", port = 5353 },
+    ]
+  }
+  assert {
+    condition = toset([for r in output.policies["cloud"] : "${r.type}:${r.action}:${r.source}:${r.proto}:${r.dport}" if contains(["192.168.1.42/32", "192.168.1.43/32"], coalesce(r.source, "-"))]) == toset([
+      "in:ACCEPT:192.168.1.42/32:tcp:443", "in:ACCEPT:192.168.1.43/32:udp:5353"
+    ])
+    error_message = "External host connections must grant only the requested inbound /32, protocol, and port."
+  }
+  assert {
+    condition     = alltrue([for i, r in output.policies["cloud"] : i < index([for rule in output.policies["cloud"] : rule.comment], "hsp:protect-in:192.168.1.0/24") if contains(["192.168.1.42/32", "192.168.1.43/32"], coalesce(r.source, "-"))])
+    error_message = "External host ingress must precede protected-source drops."
+  }
+  assert {
+    condition     = alltrue(flatten([for name, rules in output.policies : [for r in rules : !(r.action == "ACCEPT" && (contains(["192.168.1.42/32", "192.168.1.43/32"], coalesce(r.dest, "-")) || (name != "cloud" && contains(["192.168.1.42/32", "192.168.1.43/32"], coalesce(r.source, "-")))))]])) && alltrue([for r in output.host_policy : !(r.action == "ACCEPT" && contains(["192.168.1.42/32", "192.168.1.43/32"], coalesce(r.source, "-")))])
+    error_message = "External source exceptions must not add guest egress or access to other guests or host management."
+  }
+  assert {
+    condition     = contains([for r in output.policies["proxy"] : "${r.type}:${coalesce(r.dest, "-")}:${coalesce(r.dport, "-")}"], "out:10.77.0.6/32:8080") && contains([for r in output.policies["cloud"] : "${r.type}:${coalesce(r.source, "-")}:${coalesce(r.dport, "-")}"], "in:10.77.0.2/32:8080")
+    error_message = "Guest dependencies must retain paired rules alongside external sources."
+  }
+}
+run "reject_connection_subnet_source" {
+  command = plan
+  variables { connections = [{ from = "192.168.1.0/24", to = "cloud", protocol = "tcp", port = 443 }] }
+  expect_failures = [var.connections]
+}
+run "reject_connection_ipv6_source" {
+  command = plan
+  variables { connections = [{ from = "fd00::42/128", to = "cloud", protocol = "tcp", port = 443 }] }
+  expect_failures = [var.connections]
+}
+run "reject_connection_platform_ip_source" {
+  command = plan
+  variables { connections = [{ from = "10.77.0.2/32", to = "cloud", protocol = "tcp", port = 443 }] }
+  expect_failures = [var.connections]
+}
+run "reject_connection_unknown_source" {
+  command = plan
+  variables { connections = [{ from = "missing", to = "cloud", protocol = "tcp", port = 443 }] }
+  expect_failures = [var.connections]
+}
+run "reject_connection_bare_platform_ip_source" {
+  command = plan
+  variables { connections = [{ from = "10.77.0.2", to = "cloud", protocol = "tcp", port = 443 }] }
+  expect_failures = [var.connections]
+}
+run "reject_external_source_unknown_guest" {
+  command = plan
+  variables { connections = [{ from = "192.168.1.42/32", to = "missing", protocol = "tcp", port = 443 }] }
+  expect_failures = [var.connections]
+}
+run "reject_external_source_invalid_protocol" {
+  command = plan
+  variables { connections = [{ from = "192.168.1.42/32", to = "cloud", protocol = "icmp", port = 443 }] }
+  expect_failures = [var.connections]
+}
+run "reject_external_source_fractional_port" {
+  command = plan
+  variables { connections = [{ from = "192.168.1.42/32", to = "cloud", protocol = "tcp", port = 443.5 }] }
+  expect_failures = [var.connections]
+}
+run "reject_connection_external_to_external" {
+  command = plan
+  variables { connections = [{ from = "192.168.1.42/32", to = "172.16.10.30", protocol = "tcp", port = 443 }] }
+  expect_failures = [var.connections]
+}
 run "lan_public_ports_are_per_guest" {
   command = plan
   variables {
