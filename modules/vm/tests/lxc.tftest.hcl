@@ -35,6 +35,109 @@ run "managed_mount_volumes" {
     error_message = "Mount order, size, container path, default/override storage and per-mount backup flags must be preserved."
   }
 }
+run "raw_lxc_configuration_payload" {
+  command = plan
+  variables {
+    proxmox_ssh = { host = "192.168.1.10", user = "root" }
+    lxc_mounts = [
+      "/dev/dri dev/dri none bind,optional,create=dir",
+      "/dev/dri/card0 dev/dri/card0 none bind,optional,create=file",
+      "/dev/dri/renderD128 dev/renderD128 none bind,optional,create=file",
+    ]
+    lxc_cgroups = { "devices.allow" = ["c 226:0 rwm", "c 226:128 rwm", "c 29:0 rwm"] }
+  }
+  assert {
+    condition = jsondecode(base64decode(terraform_data.lxc_config[0].input.payload)).entries == [
+      ["lxc.mount.entry", "/dev/dri dev/dri none bind,optional,create=dir"],
+      ["lxc.mount.entry", "/dev/dri/card0 dev/dri/card0 none bind,optional,create=file"],
+      ["lxc.mount.entry", "/dev/dri/renderD128 dev/renderD128 none bind,optional,create=file"],
+      ["lxc.cgroup2.devices.allow", "c 226:0 rwm"],
+      ["lxc.cgroup2.devices.allow", "c 226:128 rwm"],
+      ["lxc.cgroup2.devices.allow", "c 29:0 rwm"],
+    ]
+    error_message = "Raw LXC inputs must preserve all repeated mount/cgroup entries and the requested render destination."
+  }
+}
+run "raw_lxc_defaults_need_no_ssh" {
+  command = plan
+  assert {
+    condition     = length(terraform_data.lxc_config) == 0
+    error_message = "Ordinary LXC guests must not require or attempt SSH."
+  }
+}
+run "reject_raw_mounts_without_ssh" {
+  command = plan
+  variables { lxc_mounts = ["/dev/dri dev/dri none bind,optional,create=dir"] }
+  expect_failures = [var.proxmox_ssh]
+}
+run "reject_raw_mounts_on_vm" {
+  command = plan
+  variables {
+    guest_type     = "vm"
+    vm_template_id = 9000
+    proxmox_ssh    = { host = "pve", user = "root" }
+    lxc_mounts     = ["/dev/dri dev/dri none bind,optional,create=dir"]
+  }
+  expect_failures = [var.lxc_mounts]
+}
+run "reject_raw_cgroups_on_vm" {
+  command = plan
+  variables {
+    guest_type     = "vm"
+    vm_template_id = 9000
+    proxmox_ssh    = { host = "pve", user = "root" }
+    lxc_cgroups    = { "devices.allow" = ["c 226:0 rwm"] }
+  }
+  expect_failures = [var.lxc_cgroups]
+}
+run "reject_multiline_mount" {
+  command = plan
+  variables {
+    proxmox_ssh = { host = "pve", user = "root" }
+    lxc_mounts  = ["/dev/dri dev/dri none bind\nlxc.apparmor.profile: unconfined"]
+  }
+  expect_failures = [var.lxc_mounts]
+}
+run "reject_multiline_cgroup" {
+  command = plan
+  variables {
+    proxmox_ssh = { host = "pve", user = "root" }
+    lxc_cgroups = { "devices.allow" = ["c 226:0 rwm\nlxc.apparmor.profile: unconfined"] }
+  }
+  expect_failures = [var.lxc_cgroups]
+}
+run "reject_invalid_cgroup_key" {
+  command = plan
+  variables {
+    proxmox_ssh = { host = "pve", user = "root" }
+    lxc_cgroups = { "devices.allow: a" = ["c 226:0 rwm"] }
+  }
+  expect_failures = [var.lxc_cgroups]
+}
+run "reject_duplicate_mount" {
+  command = plan
+  variables {
+    proxmox_ssh = { host = "pve", user = "root" }
+    lxc_mounts  = ["/dev/dri dev/dri none bind", "/dev/dri dev/dri none bind"]
+  }
+  expect_failures = [var.lxc_mounts]
+}
+run "reject_cgroup_surrounding_whitespace" {
+  command = plan
+  variables {
+    proxmox_ssh = { host = "pve", user = "root" }
+    lxc_cgroups = { "devices.allow" = [" c 226:128 rwm "] }
+  }
+  expect_failures = [var.lxc_cgroups]
+}
+run "reject_uppercase_cgroup_key" {
+  command = plan
+  variables {
+    proxmox_ssh = { host = "pve", user = "root" }
+    lxc_cgroups = { "devices.Allow" = ["c 226:128 rwm"] }
+  }
+  expect_failures = [var.lxc_cgroups]
+}
 run "mount_sizes_match_proxmox_readback" {
   command = plan
   variables {

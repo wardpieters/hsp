@@ -7,5 +7,6 @@ check:
 	terraform fmt -check -recursive
 	@set -e; for dir in $(TF_DIRS); do terraform -chdir=$$dir validate -no-color; terraform -chdir=$$dir test -no-color; done
 	node --test tests/nesting-api.test.mjs
+	node --test tests/lxc-config.test.mjs
 fmt:
 	terraform fmt -recursive

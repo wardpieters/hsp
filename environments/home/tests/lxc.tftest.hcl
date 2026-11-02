@@ -79,6 +79,39 @@ run "all_lxc_without_vm_template" {
     error_message = "An LXC private proxy must receive only the selected LAN HTTPS exception."
   }
 }
+run "raw_lxc_mounts_require_host_ssh_through_inventory" {
+  command = plan
+  variables {
+    guests = {
+      proxy = { vm_id = 1000, slot = 0, vnet_id = "hsp1000", role = "private_proxy" }
+      files = {
+        type       = "lxc", vm_id = 1001, slot = 1, vnet_id = "hsp1001"
+        lxc_mounts = ["/dev/dri dev/dri none bind,optional,create=dir"]
+      }
+    }
+    connections = []
+  }
+  expect_failures = [var.proxmox_ssh]
+}
+run "raw_lxc_configuration_through_inventory" {
+  command = plan
+  variables {
+    proxmox_ssh = { host = "192.168.1.10", user = "root" }
+    guests = {
+      proxy = { vm_id = 1000, slot = 0, vnet_id = "hsp1000", role = "private_proxy" }
+      files = {
+        type        = "lxc", vm_id = 1001, slot = 1, vnet_id = "hsp1001"
+        lxc_mounts  = ["/dev/dri dev/dri none bind,optional,create=dir"]
+        lxc_cgroups = { "devices.allow" = ["c 226:0 rwm", "c 226:128 rwm"] }
+      }
+    }
+    connections = []
+  }
+  assert {
+    condition     = output.guests["files"].type == "lxc" && output.guests["files"].address == "10.77.0.6"
+    error_message = "Raw LXC configuration must work through the inventory without changing network identity."
+  }
+}
 run "reject_lxc_missing_template" {
   command = plan
   variables { lxc_template = null }

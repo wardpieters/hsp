@@ -43,6 +43,56 @@ variable "lxc_template" {
     error_message = "LXC guests require lxc_template with a storage:vztmpl/archive file_id and a supported managed os_type."
   }
 }
+variable "lxc_mounts" {
+  description = "Ordered raw lxc.mount.entry values, managed over host SSH. Applied on the next container restart."
+  type        = list(string)
+  default     = []
+  nullable    = false
+  validation {
+    condition = try(
+      (var.guest_type == "lxc" || length(var.lxc_mounts) == 0) &&
+      length(distinct(var.lxc_mounts)) == length(var.lxc_mounts) &&
+      alltrue([for mount in var.lxc_mounts :
+        !can(regex("[\\r\\n\\x00]", mount)) && can(regex("^\\S+ +\\S+ +\\S+ +\\S+( +[0-9]+ +[0-9]+)?$", mount))
+    ]), false)
+    error_message = "lxc_mounts are LXC-only: use unique single-line mount entries (source target filesystem options, optionally dump/pass), without the lxc.mount.entry prefix."
+  }
+}
+variable "lxc_cgroups" {
+  description = "Raw cgroup2 key suffixes mapped to ordered values, e.g. devices.allow = [\"c 226:0 rwm\"]. Managed over SSH."
+  type        = map(list(string))
+  default     = {}
+  nullable    = false
+  validation {
+    condition = try(
+      (var.guest_type == "lxc" || length(var.lxc_cgroups) == 0) &&
+      alltrue([for key, values in var.lxc_cgroups :
+        can(regex("^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)+$", key)) &&
+        length(values) > 0 && length(distinct(values)) == length(values) &&
+        alltrue([for value in values : trimspace(value) != "" && trimspace(value) == value && !can(regex("[\\r\\n\\x00]", value))])
+    ]), false)
+    error_message = "lxc_cgroups are LXC-only: use lowercase cgroup2 key suffixes such as devices.allow and nonempty lists of unique single-line values without surrounding whitespace."
+  }
+}
+variable "proxmox_ssh" {
+  description = "Optional SSH agent connection to the Proxmox node for raw LXC entries. Non-root users need passwordless sudo."
+  type        = object({ host = string, user = string, port = optional(number, 22), host_key = optional(string) })
+  default     = null
+  validation {
+    condition = try(
+      (length(var.lxc_mounts) == 0 && length(var.lxc_cgroups) == 0) || var.proxmox_ssh != null,
+    false)
+    error_message = "Raw lxc_mounts/lxc_cgroups require proxmox_ssh with host and user."
+  }
+  validation {
+    condition = var.proxmox_ssh == null ? true : try(
+      can(regex("^[^[:space:]]+$", var.proxmox_ssh.host)) &&
+      can(regex("^[a-z_][a-z0-9_-]*[$]?$", var.proxmox_ssh.user)) &&
+      var.proxmox_ssh.port >= 1 && var.proxmox_ssh.port <= 65535 && floor(var.proxmox_ssh.port) == var.proxmox_ssh.port,
+    false)
+    error_message = "proxmox_ssh requires a host without whitespace, a Unix username and an integer port from 1 to 65535."
+  }
+}
 variable "datastore_id" {
   type = string
   validation {

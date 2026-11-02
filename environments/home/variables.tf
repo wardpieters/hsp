@@ -38,6 +38,15 @@ variable "pihole_password" {
   sensitive = true
 }
 variable "node_name" { type = string }
+variable "proxmox_ssh" {
+  description = "Optional Proxmox host SSH agent connection, required only for raw LXC mounts/cgroups; non-root users need passwordless sudo."
+  type        = object({ host = string, user = string, port = optional(number, 22), host_key = optional(string) })
+  default     = null
+  validation {
+    condition     = var.proxmox_ssh != null || alltrue([for guest in values(var.guests) : length(guest.lxc_mounts) == 0 && length(guest.lxc_cgroups) == 0])
+    error_message = "Guests with lxc_mounts/lxc_cgroups require proxmox_ssh with host and user."
+  }
+}
 variable "platform_cidr" { type = string }
 variable "host_address" {
   type = string
@@ -148,6 +157,8 @@ variable "guests" {
     vm_id                 = number, slot = number, vnet_id = string, role = optional(string, "workload"),
     type                  = optional(string, "vm"),
     nesting               = optional(bool, false),
+    lxc_mounts            = optional(list(string), []),
+    lxc_cgroups           = optional(map(list(string)), {}),
     started               = optional(bool, false), on_boot = optional(bool, false),
     bootstrap             = optional(bool, false),
     cores                 = optional(number, 2), memory_mb = optional(number, 2048), disk_gb = optional(number, 16),

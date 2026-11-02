@@ -82,13 +82,49 @@ Mounts are ordered as `mp0`, `mp1`, etc. Append new entries and preserve existin
 
 Each mount's `backup` defaults to `true`, overriding the provider's false default. LXC root filesystems have no equivalent to the VM disk backup toggle: guest-level `backup = false` is rejected. To omit an entire LXC from backups, exclude its ID in the separately managed backup job. A mount's `backup = false` excludes that extra volume only. See [Proxmox container backup behavior](https://github.com/proxmox/pve-docs/blob/master/vzdump.adoc).
 
-Containers are unprivileged. Set `nesting = true` inside an LXC guest's entry to enable Proxmox `nesting=1`; it defaults to `false` and is rejected on VMs. FUSE, keyctl and mknod remain disabled. Containers share the host kernel, so their host isolation differs from a VM even though network policy is shared. Enabling nesting does not install or configure application/container software; host devices and custom ID maps are outside this module. The supplied SSH keys are installed for `root`, rather than creating the VM's `ward` user. Use `ssh root@<container-IP>` when an SSH server is available, or bootstrap through the Proxmox console. New containers stay stopped without autostart until inspected and explicitly activated.
+Containers are unprivileged. Set `nesting = true` inside an LXC guest's entry to enable Proxmox `nesting=1`; it defaults to `false` and is rejected on VMs. FUSE, keyctl and mknod remain disabled. Containers share the host kernel, so their host isolation differs from a VM even though network policy is shared. Enabling nesting does not install or configure application/container software. Raw host mounts and cgroup2 rules use the separate SSH inputs below; custom ID maps remain outside this module. The supplied SSH keys are installed for `root`, rather than creating the VM's `ward` user. Use `ssh root@<container-IP>` when an SSH server is available, or bootstrap through the Proxmox console. New containers stay stopped without autostart until inspected and explicitly activated.
 
 Nesting is managed automatically by a native `magodo/restful` resource using the same non-root API token. The Proxmox resource sets initial features at container creation, then ignores feature updates; the REST resource owns subsequent nesting changes and detects external drift. This avoids the pinned Proxmox provider's root-only update serialization. It sends only `nesting=1` or `nesting=0`, preserving any already-present `fuse=0`, `keyctl=0` and `mknod=0` flags because Proxmox distinguishes omitted flags from explicit zeros. Enabled or unsupported unrelated feature flags cause a clear error before any REST write. See the [provider implementation](https://github.com/bpg/terraform-provider-proxmox/blob/v0.118.1/proxmoxtf/resource/container/container.go#L2551-L2623) and [Proxmox permission check](https://github.com/proxmox/pve-container/blob/master/src/PVE/LXC.pm).
 
 Existing containers acquire REST feature ownership on the next apply without an import. The additional resource is replaced when the container is replaced, including reuse of the same CT ID. Its destroy action sends a feature-only PUT disabling nesting before container deletion; it never deletes the container through the REST provider. TLS verification follows `proxmox_insecure_tls`. No root authentication, host commands, scripts or per-container manual API requests are required. Proxmox may stage feature changes on running containers until their next restart; this module does not automatically reboot them.
 
 For existing deployments, rename `template_id` to `vm_template_id` in your private tfvars. A `moved` block migrates the existing VM resource address to its new `[0]` index without recreating it; existing network, firewall and DNS resource addresses remain. Inspect the plan for moves rather than replacements. Changing an existing entry's `type` does not convert its filesystem: create a new guest with a new ID/slot and migrate the workload/data separately. Changing a template can require replacement.
+
+### Raw LXC mounts and cgroups over SSH
+
+Use `lxc_mounts` for raw `lxc.mount.entry` values and `lxc_cgroups` for cgroup2 key suffixes mapped to lists of values. Both are optional, default empty and are LXC-only. These inputs edit the Proxmox container configuration through SSH because the API cannot write arbitrary `lxc.*` entries. Existing API authentication is unchanged; no root API password or additional provider is required.
+
+Set host access at the top level of `home.tfvars` (this is separate from `environments/host-config/hosts.tfvars`):
+
+```hcl
+proxmox_ssh = {
+  host = "192.168.50.10"
+  user = "root"
+  # port = 22
+  # host_key = "ssh-ed25519 AAAA..." # Supply the real host key to verify the server.
+}
+```
+
+Load a client SSH key authorized on the Proxmox host into your local SSH agent before applying. The connection must reach the host identified by `node_name`; the helper checks that the node matches. A non-root SSH user needs passwordless sudo for the Perl helper. No SSH connection is attempted for guests with empty raw inputs. Omitting `host_key` leaves host-key verification disabled, consistent with the existing host-routing setup.
+
+For the requested GPU mounts, add these fields inside an LXC guest entry:
+
+```hcl
+lxc_mounts = [
+  "/dev/dri dev/dri none bind,optional,create=dir",
+  "/dev/dri/card0 dev/dri/card0 none bind,optional,create=file",
+  "/dev/dri/renderD128 dev/renderD128 none bind,optional,create=file",
+]
+lxc_cgroups = {
+  "devices.allow" = ["c 226:0 rwm", "c 226:128 rwm", "c 29:0 rwm"]
+}
+```
+
+This writes three `lxc.mount.entry:` lines and three `lxc.cgroup2.devices.allow:` lines. Supply lowercase cgroup keys and single-line values without surrounding whitespace, key prefixes or trailing continuation backslashes. Repeated keys are supported; duplicate key/value pairs are rejected. The render-device destination is exactly `/dev/renderD128`, as requested; use `dev/dri/renderD128` instead if your application expects `/dev/dri/renderD128`. Device nodes and their permissions must permit the intended application access. Bind mounts do not copy host device data into managed backup volumes.
+
+The SSH helper uses Proxmox's container configuration lock and preserves unrelated settings, raw entries and snapshots. Matching existing entries are adopted; Terraform then owns those exact pairs. Input changes replace the SSH operation: its destroy step removes the previous pairs before the create step adds the desired ones. Emptying both inputs removes the managed pairs. Cleanup uses the connection saved in state, so keep the old SSH access available during changes and removal. The helper never deletes the container configuration or storage.
+
+Create new guests stopped using the existing two-apply activation workflow. Changes to raw mounts/cgroups take effect on the next container restart; Terraform does not restart a running guest. The SSH operation runs when its inputs/helper change or its container is replaced. It does not refresh manual edits to the raw entries. To reapply after external edits, use a normal plan/apply with `-replace='module.service["files"].module.vm.terraform_data.lxc_config[0]'`, substituting the guest name. Inspect the stopped container's configuration before activation.
 
 ## Apply Proxmox host routing
 

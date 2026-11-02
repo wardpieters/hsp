@@ -3,6 +3,8 @@ variable "guest" {
     name                  = string, vm_id = number, vm_template_id = optional(number), datastore_id = string,
     type                  = optional(string, "vm"),
     nesting               = optional(bool, false),
+    lxc_mounts            = optional(list(string), []),
+    lxc_cgroups           = optional(map(list(string)), {}),
     started               = optional(bool, false), on_boot = optional(bool, false), cores = optional(number, 2),
     memory_mb             = optional(number, 2048), disk_gb = optional(number, 16),
     backup                = optional(bool, true),
@@ -14,6 +16,10 @@ variable "guest" {
   })
 }
 variable "node_name" { type = string }
+variable "proxmox_ssh" {
+  type    = object({ host = string, user = string, port = optional(number, 22), host_key = optional(string) })
+  default = null
+}
 variable "network" { type = object({ address = string, gateway = string, cidr = string, vnet_id = string }) }
 variable "protected_cidrs" { type = list(string) }
 variable "dns_servers" { type = list(string) }
@@ -41,6 +47,9 @@ module "vm" {
   vm_id                  = var.guest.vm_id
   guest_type             = var.guest.type
   nesting                = var.guest.nesting
+  lxc_mounts             = var.guest.lxc_mounts
+  lxc_cgroups            = var.guest.lxc_cgroups
+  proxmox_ssh            = var.proxmox_ssh
   lxc_template           = var.lxc_template
   mount_points           = var.guest.mount_points
   vm_template_id         = var.guest.vm_template_id

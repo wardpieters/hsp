@@ -5,6 +5,8 @@ proxmox_insecure_tls = false # Set true to skip Proxmox certificate verification
 pihole_url           = "https://192.168.50.53"
 pihole_insecure_tls  = false # Set true to skip Pi-hole certificate verification.
 node_name            = "pve"
+# Optional host access for raw per-guest lxc_mounts/lxc_cgroups; uses your SSH agent.
+# proxmox_ssh = { host = "192.168.50.10", user = "root" }
 host_address         = "192.168.50.10"
 platform_cidr        = "10.77.0.0/24"
 protected_cidrs      = ["192.168.50.0/24", "10.78.0.0/24", "10.79.0.0/24"]
@@ -73,6 +75,9 @@ guests = {
   files = {
     type = "lxc" # Omit type for a VM.
     nesting = false # Set true to enable Proxmox nesting=1 for this LXC.
+    # Raw bind mounts/cgroup2 rules require proxmox_ssh above; applied at next restart.
+    # lxc_mounts = ["/dev/dri dev/dri none bind,optional,create=dir"]
+    # lxc_cgroups = { "devices.allow" = ["c 226:0 rwm", "c 226:128 rwm"] }
     vm_id = 1007, slot = 7, vnet_id = "hsp1007"
     cores = 1
     memory_mb = 512

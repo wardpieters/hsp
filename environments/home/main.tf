@@ -34,9 +34,11 @@ module "service" {
   public_ports_lan_cidrs = var.public_ports_lan_cidrs
   service_access_cidrs   = each.key == var.private_proxy_name ? var.service_access_cidrs : []
   lxc_template           = var.lxc_template
+  proxmox_ssh            = var.proxmox_ssh
   guest = {
     name                  = each.key, vm_id = each.value.vm_id, vm_template_id = var.vm_template_id, datastore_id = var.datastore_id,
     type                  = each.value.type, nesting = each.value.nesting, mount_points = each.value.mount_points,
+    lxc_mounts            = each.value.lxc_mounts, lxc_cgroups = each.value.lxc_cgroups,
     started               = each.value.started, on_boot = each.value.on_boot, cores = each.value.cores,
     memory_mb             = each.value.memory_mb, disk_gb = each.value.disk_gb,
     backup                = each.value.backup,
