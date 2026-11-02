@@ -34,6 +34,7 @@ http_proxy_name     = "http-proxy" # Every other guest may reach this VM on TCP 
 # Extra VM disks each default to backup = true independently of the root disk.
 # LXC rootfs backups follow job selection; configure extra-volume backups per mount.
 # Per-VM internet egress adds to the global list, e.g. [{ protocol = "tcp", port = 443 }].
+# role = "monitoring" grants TCP/UDP 1-65535 to all other guests and direct internet TCP 80/443.
 guests = {
   vpn-admin = {
     vm_id = 1000, slot = 0, vnet_id = "hsp110", role = "admin_vpn"

@@ -12,6 +12,9 @@ locals {
     } if name != var.http_proxy_name && contains(keys(var.guests), coalesce(var.http_proxy_name, "-"))]
   )
   connections = distinct(concat(var.connections, local.role_connections))
+  monitoring_connections = flatten([for monitor, g in var.guests : [for name in keys(var.guests) : [for protocol in ["tcp", "udp"] : {
+    from = monitor, to = name, protocol = protocol
+  }] if name != monitor] if g.role == "monitoring"])
   allow_rules = { for name, g in var.guests : name => concat(
     [for cidr in var.bootstrap_admin_cidrs : {
       direction = "in", address = cidr, protocol = "tcp", ports = "22", description = "bootstrap SSH:${cidr}"
@@ -23,6 +26,14 @@ locals {
     [for c in local.connections : {
       direction = "in", address = "${trimsuffix(try(module.network.networks[c.from].address, c.from), "/32")}/32", protocol = c.protocol,
       ports     = tostring(c.port), description = "${c.from}->${c.to}:${c.port}"
+    } if c.to == name],
+    [for c in local.monitoring_connections : {
+      direction = "out", address = "${module.network.networks[c.to].address}/32", protocol = c.protocol,
+      ports     = "1:65535", description = "monitoring:${c.from}->${c.to}:${c.protocol}"
+    } if c.from == name],
+    [for c in local.monitoring_connections : {
+      direction = "in", address = "${module.network.networks[c.from].address}/32", protocol = c.protocol,
+      ports     = "1:65535", description = "monitoring:${c.from}->${c.to}:${c.protocol}"
     } if c.to == name],
     g.role == "admin_vpn" ? [{
       direction = "out", address = "${var.host_address}/32", protocol = "tcp", ports = "22,8006", description = "host management"

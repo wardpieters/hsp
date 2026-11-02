@@ -14,8 +14,11 @@ These policies apply equally to `type = "vm"` (the default) and `type = "lxc"`. 
 | `admin_vpn` | May initiate TCP 22 to every other declared guest, and TCP 22/8006 to `host_address` for Proxmox SSH/API access. Matching SSH ingress is added to the destination guests. | Declare the VPN listener separately in `public_ports`. Host-side management permission depends on host firewall ownership, described below. |
 | `service_vpn` | May initiate TCP 443 to the private proxy selected by `private_proxy_name`, plus TCP 3128 to the optional forward proxy selected by `http_proxy_name`. Matching ingress is added on each destination. | Requires a declared `private_proxy` target. Additional outgoing `connections` are restricted to those same targets and ports. Declare the VPN listener in `public_ports`. Shared DNS/NTP and explicitly configured `internet_egress_ports` still apply. |
 | `management` | No additional permissions. Receives the same admin VPN SSH access as other guests. | `public_ports` must be empty. This role grants no automatic outgoing guest administration or Proxmox management access. |
+| `monitoring` | May initiate TCP and UDP on ports 1–65535 to every other declared VM or LXC, with matching ingress on each destination. Also receives direct outgoing internet TCP 80/443 by default. | Guest access is scoped to each destination's `/32`; it grants no automatic access to the Proxmox host or other LAN addresses. Direct web egress follows protected-network drops. Additional internet ports and public listeners require explicit configuration. |
 
 Every guest can receive SSH from other guests with the `admin_vpn` role. With multiple admin VPN gateways, they can SSH to each other too. A role grants network permissions to the guest's assigned IP, rather than assigning permissions to individual VPN users.
+
+Set `role = "monitoring"` on a guest to enable monitoring access; no `connections` entries are needed, and newly declared guests are included automatically. Multiple monitoring guests can monitor each other. Reply traffic is statefully allowed; the monitoring role grants no permission for other guests to initiate connections back to a monitor beyond their existing permissions. The role's TCP 80/443 internet defaults remain enabled when its `internet_egress_ports` list is empty.
 
 VPN/proxy software, user authentication, TLS, DNS aliases, and reverse proxy hostname/backend routes are configured separately. The role does not select or install a software package.
 
@@ -46,7 +49,7 @@ The protected ranges include the platform aggregate, `host_address/32`, all conf
 | `public_ports` | Allows incoming TCP/UDP on each listed destination port from `0.0.0.0/0`, after protected-source blocks. There is no public source-IP allowlist. Ports 22 and 8006 are rejected for every role; `private_proxy` and `management` reject all public ports. Defaults to empty. |
 | `public_ports_lan_cidrs` | Top-level IPv4 subnet list in `home.tfvars`, default `[]`. These LAN sources may reach each guest's declared `public_ports` before protected-source drops. guests without public ports receive no exception. Subnets must be canonical, narrower than `/0`, and must not overlap `platform_cidr`. |
 | `service_access_cidrs` | Top-level IPv4 subnet list, default `[]`. Allows only incoming TCP 443 to the guest selected by `private_proxy_name`, before protected-source drops. Requires a declared `private_proxy` target. Sources must be canonical IPv4 CIDRs narrower than `/0`, outside `platform_cidr`. Does not grant LAN access to Squid, SSH, Proxmox management, or other guests. |
-| `internet_egress_ports` | The top-level list applies to every guest; each guest's list adds its own ports. Lists are combined and duplicate protocol/port pairs removed. Both default to `[]`. Outgoing TCP/UDP is allowed only on those destination ports and to IPv4 addresses outside protected ranges. Protected-network blocks precede these allowances. |
+| `internet_egress_ports` | The top-level list applies to every guest; each guest's list adds its own ports. Lists are combined with role defaults (`monitoring` adds TCP 80/443), and duplicate protocol/port pairs removed. Both configured lists default to `[]`. Outgoing TCP/UDP is allowed only on those destination ports and to IPv4 addresses outside protected ranges. Protected-network blocks precede these allowances. |
 | `http_proxy_name` | Optional top-level guest name, default `null`. Every other declared guest, including `service_vpn`, receives outgoing TCP 3128 to that guest, with matching ingress for each client's `/32`. New guests are included automatically. Configure the proxy guest's internet egress separately. |
 
 Example VPN listener declarations use UDP 51820 and 51821; those ports are inventory choices, not automatic role defaults. EdgeRouter forwarding and a listening VPN service are separate requirements. Likewise, `public_proxy` does not automatically open TCP 80/443.
@@ -115,7 +118,7 @@ internet_egress_ports = [
 ]
 ```
 
-Each entry accepts `tcp` or `udp` and an integer port from 1 to 65535. Allowed destinations cover IPv4 addresses outside the protected ranges; these rules do not restrict access to specific websites or package repositories. IPv6 remains blocked. The former `allow_updates` flag has been replaced by this list; there is no automatic TCP 80/443 allowance.
+Each entry accepts `tcp` or `udp` and an integer port from 1 to 65535. Allowed destinations cover IPv4 addresses outside the protected ranges; these rules do not restrict access to specific websites or package repositories. IPv6 remains blocked. The former `allow_updates` flag has been replaced by this list. Only the `monitoring` role receives automatic TCP 80/443 internet access; other roles require explicit entries.
 
 With both lists empty, replies to permitted inbound connections, approved DNS/NTP targets, and declared guest/IP dependencies remain allowed. `public_ports` controls incoming services separately. DNS and NTP targets remain allowed even if you configure external resolver or time-server addresses.
 
@@ -152,7 +155,7 @@ Rules are generated in this order, with the default DROP policy handling anythin
 4. Allow configured LAN sources to reach declared public ports.
 5. Drop protected IPv4 sources and destinations.
 6. Allow configured incoming public ports from remaining sources.
-7. Allow explicitly configured outgoing internet destination ports.
+7. Allow configured outgoing internet destination ports and role defaults (`monitoring` TCP 80/443).
 
 This order permits narrow private-network dependencies while keeping the public-port and HTTP/HTTPS allowances from granting general LAN or guest-network access.
 

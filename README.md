@@ -6,7 +6,7 @@ Declare a guest once in [the home inventory](environments/home/home.tfvars.examp
 
 See the [role and firewall reference](docs/firewall-roles.md) for every role's automatic permissions, shared defaults, rule order, and configurable exceptions.
 
-Top-level `internet_egress_ports` allows outbound TCP/UDP ports for every guest. Each guest's own list adds its extra ports; both default to `[]`. Incoming services are configured with `public_ports`.
+Top-level `internet_egress_ports` allows outbound TCP/UDP ports for every guest. Each guest's own list adds its extra ports; both default to `[]`. The `monitoring` role automatically receives TCP/UDP access to all other declared guests and direct internet TCP 80/443. Incoming services are configured with `public_ports`.
 
 Guests default to `type = "vm"`, using the global `vm_template_id` (renamed from `template_id`). Set `type = "lxc"` to use the global `lxc_template` OS archive and optional `mount_points = [{ path = "/srv/data", size_gb = 50 }]`. Containers are unprivileged and use the same roles, DNS and firewall rules. See [LXC configuration and storage](docs/deployment.md#lxc-guests-and-storage) for the full example, backup behavior, and migration notes. The current `/24` supports 64 guests total across both types.
 

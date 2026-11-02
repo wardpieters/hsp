@@ -111,7 +111,7 @@ variable "domain" {
 }
 variable "ntp_servers" { type = list(string) }
 variable "internet_egress_ports" {
-  description = "Outbound TCP/UDP destination ports allowed for every VM and LXC, combined with each guest's internet_egress_ports."
+  description = "Outbound TCP/UDP destination ports allowed for every VM and LXC, combined with each guest's internet_egress_ports and role defaults (monitoring adds TCP 80/443)."
   type        = list(object({ protocol = string, port = number }))
   default     = []
   nullable    = false
@@ -183,7 +183,7 @@ variable "guests" {
       length(distinct(flatten([for g in values(var.guests) : keys(g.dns)]))) == length(flatten([for g in values(var.guests) : keys(g.dns)])) &&
       alltrue([for name, g in var.guests : can(regex("^[a-z][a-z0-9-]{0,62}$", name)) &&
         contains(["vm", "lxc"], g.type) &&
-        contains(["workload", "public_proxy", "private_proxy", "admin_vpn", "service_vpn", "management"], g.role) &&
+        contains(["workload", "public_proxy", "private_proxy", "admin_vpn", "service_vpn", "management", "monitoring"], g.role) &&
       (!contains(["private_proxy", "management"], g.role) || length(g.public_ports) == 0)])
     )
     error_message = "Guest names/types/roles must be valid, VM/LXC IDs/slots/VNets/DNS aliases unique, and private/management guests cannot expose public ports."
