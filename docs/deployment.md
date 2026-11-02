@@ -8,6 +8,8 @@ Top-level `internet_egress_ports` applies to every VM and LXC and is combined wi
 
 The optional top-level `http_proxy_name` selects a shared HTTP forward proxy. The example's `http-proxy` VM has outbound TCP 80/443, and every other declared VM receives TCP 3128 access to it. Install Squid after provisioning and configure clients to use its proxy URL; see the [shared proxy reference](firewall-roles.md#shared-http-forward-proxy).
 
+After starting a Debian guest, follow [Debian guest setup](debian-setup.md) to configure the login environment, APT, and Docker Engine to use the shared proxy, including Docker log rotation and access checks.
+
 Set top-level `service_access_cidrs` to trusted LAN subnets for direct HTTPS access to the guest selected by `private_proxy_name`. It defaults to `[]` and grants only TCP 443 to that private proxy. Squid and management access are separate; see [LAN access to private services](firewall-roles.md#lan-access-to-private-services).
 
 ## Prerequisites

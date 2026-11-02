@@ -138,6 +138,8 @@ Set the top-level `http_proxy_name = "http-proxy"` to select a declared guest. T
 
 This grants proxied web access to all declared guests, including the family VPN guest. Squid must listen on TCP 3128 and apply appropriate client and destination ACLs. Terraform provisions the guest and firewall/DNS rules; install Squid and configure proxy use inside clients separately. Access to the proxy is explicit HTTP proxying, rather than automatic redirection of all guest traffic. Proxmox blocks the proxy's connections to protected destinations except declared dependencies and narrow infrastructure exceptions. An IP dependency from `http-proxy` also allows Squid to relay matching requests for its clients, subject to its ACLs.
 
+For client configuration, follow [Debian guest setup](debian-setup.md) for login environment variables, APT downloads, and Docker Engine proxy and logging settings.
+
 DNS target selection and firewall dependencies are configured separately. For example, pointing `web.home.ward.nl` at `proxy-private` also requires an appropriate `proxy-private` → `web` backend connection and a corresponding proxy route. A DNS alias alone adds no firewall exception.
 
 ## Guest rule order
