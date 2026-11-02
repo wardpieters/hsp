@@ -29,6 +29,7 @@ module "service" {
   network                = module.network.networks[each.key]
   protected_cidrs        = concat([var.platform_cidr, "${var.host_address}/32"], var.protected_cidrs)
   dns_servers            = var.dns_servers
+  domain                 = var.domain
   ntp_servers            = var.ntp_servers
   ssh_public_keys        = var.ssh_public_keys
   public_ports_lan_cidrs = var.public_ports_lan_cidrs

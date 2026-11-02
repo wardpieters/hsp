@@ -1,3 +1,8 @@
+variable "domain" {
+  description = "DNS domain appended to each record name."
+  type        = string
+  nullable    = false
+}
 variable "records" {
   type = map(object({ mode = string, address = string, proxy_address = optional(string) }))
   validation {
@@ -10,7 +15,7 @@ variable "records" {
 }
 resource "pihole_dns_record" "this" {
   for_each = { for name, r in var.records : name => r if r.mode != "none" }
-  domain   = "${each.key}.home.ward.nl"
+  domain   = "${each.key}.${var.domain}"
   ip       = each.value.mode == "proxy" ? each.value.proxy_address : each.value.address
 }
 output "names" { value = [for r in pihole_dns_record.this : r.domain] }

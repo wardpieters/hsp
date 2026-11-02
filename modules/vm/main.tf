@@ -46,7 +46,7 @@ resource "proxmox_virtual_environment_vm" "this" {
   initialization {
     datastore_id = var.datastore_id
     dns {
-      domain  = "home.ward.nl"
+      domain  = var.domain
       servers = var.dns_servers
     }
     ip_config {

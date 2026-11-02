@@ -25,6 +25,10 @@ variable "proxmox_ssh" {
 variable "network" { type = object({ address = string, gateway = string, cidr = string, vnet_id = string }) }
 variable "protected_cidrs" { type = list(string) }
 variable "dns_servers" { type = list(string) }
+variable "domain" {
+  type     = string
+  nullable = false
+}
 variable "ntp_servers" { type = list(string) }
 variable "ssh_public_keys" { type = list(string) }
 variable "public_ports_lan_cidrs" {
@@ -67,6 +71,7 @@ module "vm" {
   backup                 = var.guest.backup
   protected_cidrs        = var.protected_cidrs
   dns_servers            = var.dns_servers
+  domain                 = var.domain
   ntp_servers            = var.ntp_servers
   ssh_public_keys        = var.ssh_public_keys
   internet_egress_ports  = var.guest.internet_egress_ports
@@ -77,6 +82,7 @@ module "vm" {
 }
 module "dns" {
   source  = "../dns_records"
+  domain  = var.domain
   records = { for name, r in var.guest.dns : name => { mode = r.mode, address = var.network.address, proxy_address = r.proxy_address } }
 }
 output "address" { value = var.network.address }

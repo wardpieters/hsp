@@ -195,6 +195,11 @@ variable "username" {
   type    = string
   default = "ward"
 }
+variable "domain" {
+  description = "DNS search domain for the guest."
+  type        = string
+  nullable    = false
+}
 variable "dns_servers" {
   type = list(string)
   validation {

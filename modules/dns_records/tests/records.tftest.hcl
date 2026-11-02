@@ -1,5 +1,6 @@
 mock_provider "pihole" {}
 variables {
+  domain = "home.example.com"
   records = {
     storage = { mode = "direct", address = "10.77.0.2" }
     cloud   = { mode = "proxy", address = "10.77.0.2", proxy_address = "10.77.0.6" }
@@ -9,7 +10,7 @@ variables {
 run "targets" {
   command = plan
   assert {
-    condition     = pihole_dns_record.this["storage"].domain == "storage.home.ward.nl" && pihole_dns_record.this["storage"].ip == "10.77.0.2" && pihole_dns_record.this["cloud"].ip == "10.77.0.6" && !contains(keys(pihole_dns_record.this), "hidden")
+    condition     = pihole_dns_record.this["storage"].domain == "storage.home.example.com" && pihole_dns_record.this["storage"].ip == "10.77.0.2" && pihole_dns_record.this["cloud"].ip == "10.77.0.6" && !contains(keys(pihole_dns_record.this), "hidden")
     error_message = "DNS must honor direct/proxy/none independently for every alias."
   }
 }

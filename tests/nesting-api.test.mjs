@@ -72,6 +72,7 @@ variables {
   network = { address = "10.77.0.38", gateway = "10.77.0.37", cidr = "10.77.0.36/30", vnet_id = "hsp1009" }
   protected_cidrs = ["192.168.1.0/24"]
   dns_servers = ["192.168.1.53"]
+  domain = "home.example.com"
   ntp_servers = []
   ssh_public_keys = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGbQ7fxCXpGk6DckT2PRXJ5w5pMR6qksY6hOyw4mftR1 test"]
 }

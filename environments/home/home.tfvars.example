@@ -15,6 +15,7 @@ public_ports_lan_cidrs = ["192.168.50.0/24"] # LAN access to each VM's public_po
 service_access_cidrs = ["192.168.50.0/24"] # Private proxy TCP 443 only; default [].
 manage_host_firewall = false # Opt in only after reviewing/importing existing rules.
 dns_servers         = ["192.168.50.53"]
+domain              = "home.example.com"
 ntp_servers         = [] # Use the guest's configured NTP pool instead of fixed-IP exceptions.
 internet_egress_ports = [{ protocol = "udp", port = 123 }] # Shared by every VM.
 vm_template_id      = 9000 # Renamed from template_id; used only by VM guests.

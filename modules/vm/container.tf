@@ -48,7 +48,7 @@ resource "proxmox_virtual_environment_container" "this" {
   initialization {
     hostname = var.name
     dns {
-      domain  = "home.ward.nl"
+      domain  = var.domain
       servers = var.dns_servers
     }
     ip_config {

@@ -7,6 +7,7 @@ mock_provider "restful" {
 mock_provider "proxmox" {}
 mock_provider "pihole" {}
 variables {
+  domain                 = "home.example.com"
   proxmox_api_token      = "terraform@pve!offline=offline-test-only"
   proxmox_endpoint       = "https://192.168.1.10:8006/"
   pihole_url             = "https://192.168.1.53"

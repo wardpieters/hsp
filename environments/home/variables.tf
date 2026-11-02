@@ -104,6 +104,11 @@ variable "manage_host_firewall" {
   default     = false
 }
 variable "dns_servers" { type = list(string) }
+variable "domain" {
+  description = "DNS domain appended to guest record names."
+  type        = string
+  nullable    = false
+}
 variable "ntp_servers" { type = list(string) }
 variable "internet_egress_ports" {
   description = "Outbound TCP/UDP destination ports allowed for every VM and LXC, combined with each guest's internet_egress_ports."

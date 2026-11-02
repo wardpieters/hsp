@@ -16,6 +16,7 @@ run "migrate_without_vm_or_firewall_replacement" {
   command   = plan
   state_key = "migration"
   variables {
+    domain          = "home.ward.nl"
     name            = "migration-vm"
     node_name       = "pve"
     vm_id           = 100

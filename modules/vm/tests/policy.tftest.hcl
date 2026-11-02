@@ -6,6 +6,7 @@ mock_provider "restful" {
 }
 mock_provider "proxmox" {}
 variables {
+  domain          = "home.example.com"
   name            = "owncloud"
   node_name       = "pve"
   vm_id           = 100
