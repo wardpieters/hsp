@@ -222,13 +222,13 @@ variable "protected_cidrs" {
   }
 }
 variable "internet_egress_ports" {
-  description = "Outbound TCP/UDP destination ports allowed outside protected networks. Defaults to no internet egress."
-  type        = list(object({ protocol = string, port = number }))
+  description = "Outbound TCP/UDP destination ports or portless ICMP allowed outside protected networks. Defaults to no internet egress."
+  type        = list(object({ protocol = string, port = optional(number) }))
   default     = []
   nullable    = false
   validation {
-    condition     = alltrue([for p in var.internet_egress_ports : try(contains(["tcp", "udp"], p.protocol) && p.port >= 1 && p.port <= 65535 && floor(p.port) == p.port, false)])
-    error_message = "Internet egress ports require TCP/UDP and an integer destination port from 1 to 65535."
+    condition     = alltrue([for p in var.internet_egress_ports : p.protocol == "icmp" ? p.port == null : try(contains(["tcp", "udp"], p.protocol) && p.port >= 1 && p.port <= 65535 && floor(p.port) == p.port, false)])
+    error_message = "Internet egress requires TCP/UDP with an integer destination port from 1 to 65535, or ICMP with no port."
   }
 }
 variable "public_ports_lan_cidrs" {

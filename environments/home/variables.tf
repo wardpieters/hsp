@@ -111,13 +111,13 @@ variable "domain" {
 }
 variable "ntp_servers" { type = list(string) }
 variable "internet_egress_ports" {
-  description = "Outbound TCP/UDP destination ports allowed for every VM and LXC, combined with each guest's internet_egress_ports and role defaults (monitoring adds TCP 80/443)."
-  type        = list(object({ protocol = string, port = number }))
+  description = "Outbound TCP/UDP destination ports or portless ICMP allowed for every VM and LXC, combined with each guest's internet_egress_ports and role defaults (monitoring adds TCP 80/443)."
+  type        = list(object({ protocol = string, port = optional(number) }))
   default     = []
   nullable    = false
   validation {
-    condition     = alltrue([for p in var.internet_egress_ports : try(contains(["tcp", "udp"], p.protocol) && p.port >= 1 && p.port <= 65535 && floor(p.port) == p.port, false)])
-    error_message = "Global internet egress ports require TCP/UDP and an integer destination port from 1 to 65535."
+    condition     = alltrue([for p in var.internet_egress_ports : p.protocol == "icmp" ? p.port == null : try(contains(["tcp", "udp"], p.protocol) && p.port >= 1 && p.port <= 65535 && floor(p.port) == p.port, false)])
+    error_message = "Global internet egress requires TCP/UDP with an integer destination port from 1 to 65535, or ICMP with no port."
   }
 }
 variable "vm_template_id" {
@@ -171,7 +171,7 @@ variable "guests" {
     ssd                   = optional(bool, false),
     extra_disks           = optional(map(object({ size_gb = number, datastore_id = optional(string), backup = optional(bool, true), ssd = optional(bool, false) })), {}),
     mount_points          = optional(list(object({ path = string, size_gb = number, datastore_id = optional(string), backup = optional(bool, true) })), []),
-    internet_egress_ports = optional(list(object({ protocol = string, port = number })), []),
+    internet_egress_ports = optional(list(object({ protocol = string, port = optional(number) })), []),
     public_ports          = optional(list(object({ protocol = string, port = number })), []),
     dns                   = optional(map(object({ mode = string, proxy_name = optional(string), proxy_address = optional(string) })), {})
   }))

@@ -311,9 +311,47 @@ run "global_and_guest_egress_are_combined" {
     error_message = "An empty NTP server list must remove the fixed-IP NTP exception when using pool-based internet egress."
   }
 }
+run "global_icmp_egress_is_inherited_and_deduplicated" {
+  command = plan
+  variables {
+    internet_egress_ports = [{ protocol = "icmp" }]
+    guests = {
+      proxy = { vm_id = 100, slot = 0, vnet_id = "hsp100", role = "private_proxy", internet_egress_ports = [{ protocol = "icmp", port = null }, { protocol = "tcp", port = 443 }] }
+      cloud = { vm_id = 101, slot = 1, vnet_id = "hsp101" }
+    }
+  }
+  assert {
+    condition     = alltrue([for rules in values(output.policies) : length([for r in rules : r if r.type == "out" && r.action == "ACCEPT" && r.dest == "0.0.0.0/0" && r.proto == "icmp" && r.dport == null]) == 1]) && length([for r in output.policies["proxy"] : r if r.comment == "hsp:internet:tcp:443"]) == 1
+    error_message = "Global ICMP must reach every guest once, deduplicate local ICMP, and preserve TCP allowances."
+  }
+}
+run "guest_icmp_egress_is_scoped_to_lxc" {
+  command = plan
+  variables {
+    lxc_template = { file_id = "local:vztmpl/debian.tar.zst" }
+    guests = {
+      proxy = { vm_id = 100, slot = 0, vnet_id = "hsp100", role = "private_proxy" }
+      cloud = { type = "lxc", vm_id = 101, slot = 1, vnet_id = "hsp101", internet_egress_ports = [{ protocol = "icmp" }] }
+    }
+  }
+  assert {
+    condition     = length([for r in output.policies["cloud"] : r if r.type == "out" && r.action == "ACCEPT" && r.dest == "0.0.0.0/0" && r.proto == "icmp" && r.dport == null]) == 1 && length([for r in output.policies["proxy"] : r if r.proto == "icmp"]) == 0
+    error_message = "A per-guest ICMP entry must propagate to the LXC without enabling ICMP on other guests."
+  }
+}
 run "reject_global_egress_protocol" {
   command = plan
+  variables { internet_egress_ports = [{ protocol = "gre", port = 123 }] }
+  expect_failures = [var.internet_egress_ports]
+}
+run "reject_global_icmp_egress_port" {
+  command = plan
   variables { internet_egress_ports = [{ protocol = "icmp", port = 123 }] }
+  expect_failures = [var.internet_egress_ports]
+}
+run "reject_global_tcp_egress_missing_port" {
+  command = plan
+  variables { internet_egress_ports = [{ protocol = "tcp" }] }
   expect_failures = [var.internet_egress_ports]
 }
 run "reject_global_egress_port" {

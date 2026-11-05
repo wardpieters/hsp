@@ -32,7 +32,8 @@ locals {
       source = "0.0.0.0/0", proto = p.protocol, dport = tostring(p.port), comment = "hsp:public:${p.protocol}:${p.port}"
     })],
     [for p in var.internet_egress_ports : merge(local.base_rule, {
-      type = "out", dest = "0.0.0.0/0", proto = p.protocol, dport = tostring(p.port), comment = "hsp:internet:${p.protocol}:${p.port}"
+      type    = "out", dest = "0.0.0.0/0", proto = p.protocol, dport = p.protocol == "icmp" ? null : tostring(p.port),
+      comment = p.protocol == "icmp" ? "hsp:internet:icmp" : "hsp:internet:${p.protocol}:${p.port}"
     })]
   )
 }

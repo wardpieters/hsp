@@ -11,7 +11,7 @@ variable "guest" {
     ssd                   = optional(bool, false),
     extra_disks           = optional(map(object({ size_gb = number, datastore_id = optional(string), backup = optional(bool, true), ssd = optional(bool, false) })), {}),
     mount_points          = optional(list(object({ path = string, size_gb = number, datastore_id = optional(string), backup = optional(bool, true) })), []),
-    internet_egress_ports = optional(list(object({ protocol = string, port = number })), []),
+    internet_egress_ports = optional(list(object({ protocol = string, port = optional(number) })), []),
     public_ports          = optional(list(object({ protocol = string, port = number })), []),
     allow_rules           = optional(list(object({ direction = string, address = string, protocol = string, ports = string, description = string })), []),
     dns                   = optional(map(object({ mode = string, proxy_address = optional(string) })), {})

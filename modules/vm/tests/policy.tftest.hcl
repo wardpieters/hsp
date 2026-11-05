@@ -126,9 +126,46 @@ run "reject_public_ports_lan_ipv6" {
   variables { public_ports_lan_cidrs = ["fd00::/64"] }
   expect_failures = [var.public_ports_lan_cidrs]
 }
+run "icmp_internet_egress_without_port" {
+  command = plan
+  variables {
+    internet_egress_ports = [{ protocol = "icmp" }, { protocol = "tcp", port = 443 }, { protocol = "udp", port = 123 }]
+  }
+  assert {
+    condition     = length([for r in output.rules : r if r.type == "out" && r.action == "ACCEPT" && r.dest == "0.0.0.0/0"]) == 3 && length([for r in proxmox_virtual_environment_firewall_rules.this.rule : r if r.type == "out" && r.action == "ACCEPT" && r.dest == "0.0.0.0/0" && r.proto == "icmp" && r.dport == null]) == 1
+    error_message = "ICMP egress must reach the firewall resource without a destination port alongside TCP/UDP rules."
+  }
+  assert {
+    condition     = alltrue(flatten([for i, r in output.rules : [for j, protected in output.rules : i > j if protected.type == "out" && protected.action == "DROP"] if r.proto == "icmp" && r.action == "ACCEPT"])) && length([for r in output.rules : r if r.type == "in" && r.proto == "icmp" && r.action == "ACCEPT"]) == 0
+    error_message = "ICMP internet egress must follow every protected-network drop and grant no incoming ICMP allowance."
+  }
+}
+run "icmp_internet_egress_explicit_null_port" {
+  command = plan
+  variables { internet_egress_ports = [{ protocol = "icmp", port = null }] }
+  assert {
+    condition     = length([for r in output.rules : r if r.type == "out" && r.proto == "icmp" && r.dport == null && r.comment == "hsp:internet:icmp"]) == 1
+    error_message = "Explicit null and omitted ICMP ports must both produce a portless ICMP rule."
+  }
+}
 run "reject_internet_egress_protocol" {
   command = plan
+  variables { internet_egress_ports = [{ protocol = "gre", port = 443 }] }
+  expect_failures = [var.internet_egress_ports]
+}
+run "reject_icmp_internet_egress_port" {
+  command = plan
   variables { internet_egress_ports = [{ protocol = "icmp", port = 443 }] }
+  expect_failures = [var.internet_egress_ports]
+}
+run "reject_tcp_internet_egress_missing_port" {
+  command = plan
+  variables { internet_egress_ports = [{ protocol = "tcp" }] }
+  expect_failures = [var.internet_egress_ports]
+}
+run "reject_udp_internet_egress_null_port" {
+  command = plan
+  variables { internet_egress_ports = [{ protocol = "udp", port = null }] }
   expect_failures = [var.internet_egress_ports]
 }
 run "reject_internet_egress_zero_port" {
