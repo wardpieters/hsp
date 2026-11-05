@@ -18,6 +18,7 @@ dns_servers         = ["192.168.50.53"]
 domain              = "home.example.com"
 ntp_servers         = [] # Use the guest's configured NTP pool instead of fixed-IP exceptions.
 internet_egress_ports = [{ protocol = "udp", port = 123 }] # Shared by every VM.
+# Add { protocol = "icmp" } to allow internet IPv4 ICMP (including ping), without a port.
 vm_template_id      = 9000 # Renamed from template_id; used only by VM guests.
 # Required only when declaring LXC guests. Use the archive already on your host.
 lxc_template = {

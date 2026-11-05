@@ -49,7 +49,7 @@ The protected ranges include the platform aggregate, `host_address/32`, all conf
 | `public_ports` | Allows incoming TCP/UDP on each listed destination port from `0.0.0.0/0`, after protected-source blocks. There is no public source-IP allowlist. Ports 22 and 8006 are rejected for every role; `private_proxy` and `management` reject all public ports. Defaults to empty. |
 | `public_ports_lan_cidrs` | Top-level IPv4 subnet list in `home.tfvars`, default `[]`. These LAN sources may reach each guest's declared `public_ports` before protected-source drops. guests without public ports receive no exception. Subnets must be canonical, narrower than `/0`, and must not overlap `platform_cidr`. |
 | `service_access_cidrs` | Top-level IPv4 subnet list, default `[]`. Allows only incoming TCP 443 to the guest selected by `private_proxy_name`, before protected-source drops. Requires a declared `private_proxy` target. Sources must be canonical IPv4 CIDRs narrower than `/0`, outside `platform_cidr`. Does not grant LAN access to Squid, SSH, Proxmox management, or other guests. |
-| `internet_egress_ports` | The top-level list applies to every guest; each guest's list adds its own ports. Lists are combined with role defaults (`monitoring` adds TCP 80/443), and duplicate protocol/port pairs removed. Both configured lists default to `[]`. Outgoing TCP/UDP is allowed only on those destination ports and to IPv4 addresses outside protected ranges. Protected-network blocks precede these allowances. |
+| `internet_egress_ports` | The top-level list applies to every guest; each guest's list adds its own permissions. Lists are combined with role defaults (`monitoring` adds TCP 80/443), and duplicate entries removed. Both configured lists default to `[]`. Outgoing TCP/UDP is allowed only on the declared destination ports; `{ protocol = "icmp" }` allows portless IPv4 ICMP. Destinations must be outside protected ranges. Protected-network blocks precede these allowances. |
 | `http_proxy_name` | Optional top-level guest name, default `null`. Every other declared guest, including `service_vpn`, receives outgoing TCP 3128 to that guest, with matching ingress for each client's `/32`. New guests are included automatically. Configure the proxy guest's internet egress separately. |
 
 Example VPN listener declarations use UDP 51820 and 51821; those ports are inventory choices, not automatic role defaults. EdgeRouter forwarding and a listening VPN service are separate requirements. Likewise, `public_proxy` does not automatically open TCP 80/443.
@@ -110,15 +110,16 @@ The existing EdgeRouter aggregate route provides reachability; no router VLAN co
 
 ### Outbound internet ports
 
-Set top-level `internet_egress_ports` in `home.tfvars` for ports shared by every guest. Each guest's `internet_egress_ports` adds ports for that guest. An empty guest list still inherits the global list. For example, add HTTPS for one guest by setting this inside its entry:
+Set top-level `internet_egress_ports` in `home.tfvars` for permissions shared by every guest. Each guest's `internet_egress_ports` adds permissions for that guest. An empty guest list still inherits the global list. For example, add HTTPS and ICMP for one guest by setting this inside its entry:
 
 ```hcl
 internet_egress_ports = [
   { protocol = "tcp", port = 443 },
+  { protocol = "icmp" },
 ]
 ```
 
-Each entry accepts `tcp` or `udp` and an integer port from 1 to 65535. Allowed destinations cover IPv4 addresses outside the protected ranges; these rules do not restrict access to specific websites or package repositories. IPv6 remains blocked. The former `allow_updates` flag has been replaced by this list. Only the `monitoring` role receives automatic TCP 80/443 internet access; other roles require explicit entries.
+Each entry accepts `tcp` or `udp` with an integer port from 1 to 65535, or `icmp` with `port` omitted or set to `null`. A numeric port on an ICMP entry is rejected. ICMP permits all IPv4 ICMP types, including ping; it does not add an incoming allowance, and replies use the stateful firewall. Allowed destinations cover IPv4 addresses outside the protected ranges; these rules do not restrict access to specific websites or package repositories. IPv6 remains blocked. The former `allow_updates` flag has been replaced by this list. Only the `monitoring` role receives automatic TCP 80/443 internet access; other roles require explicit entries.
 
 With both lists empty, replies to permitted inbound connections, approved DNS/NTP targets, and declared guest/IP dependencies remain allowed. `public_ports` controls incoming services separately. DNS and NTP targets remain allowed even if you configure external resolver or time-server addresses.
 
@@ -155,7 +156,7 @@ Rules are generated in this order, with the default DROP policy handling anythin
 4. Allow configured LAN sources to reach declared public ports.
 5. Drop protected IPv4 sources and destinations.
 6. Allow configured incoming public ports from remaining sources.
-7. Allow configured outgoing internet destination ports and role defaults (`monitoring` TCP 80/443).
+7. Allow configured outgoing internet TCP/UDP destination ports, portless ICMP, and role defaults (`monitoring` TCP 80/443).
 
 This order permits narrow private-network dependencies while keeping the public-port and HTTP/HTTPS allowances from granting general LAN or guest-network access.
 
