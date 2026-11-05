@@ -5,8 +5,7 @@ locals {
     "172.16.0.0/12", "192.168.0.0/16", "224.0.0.0/4", "240.0.0.0/4"
   ]))
   rules = concat(
-    [merge(local.base_rule, { action = "DROP", source = "::/0", comment = "hsp:ipv6-in" }),
-    merge(local.base_rule, { type = "out", action = "DROP", dest = "::/0", comment = "hsp:ipv6-out" })],
+    local.ipv6_rules,
     [for r in var.allow_rules : merge(local.base_rule, {
       type    = r.direction, source = r.direction == "in" ? r.address : null,
       dest    = r.direction == "out" ? r.address : null, proto = r.protocol, dport = r.ports,

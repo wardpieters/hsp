@@ -117,11 +117,19 @@ variable "mount_points" {
   }
 }
 variable "network" {
-  type = object({ address = string, gateway = string, cidr = string, vnet_id = string })
+  type = object({ address = string, gateway = string, cidr = string, vnet_id = string, ipv6 = optional(object({ cidr = string, gateway = string, address = string })) })
   validation {
     condition = try(tonumber(split("/", var.network.cidr)[1]) == 30 &&
     cidrhost(var.network.cidr, 1) == var.network.gateway && cidrhost(var.network.cidr, 2) == var.network.address, false)
     error_message = "network must be a /30 with gateway at offset 1 and guest at offset 2."
+  }
+  validation {
+    condition = var.network.ipv6 == null ? true : try(
+      split("/", var.network.ipv6.cidr)[1] == "64" &&
+      cidrhost(var.network.ipv6.cidr, 0) == split("/", var.network.ipv6.cidr)[0] &&
+      cidrhost("${split("/", var.network.ipv6.cidr)[0]}/8", 0) == "fd00::" &&
+    cidrhost(var.network.ipv6.cidr, 1) == var.network.ipv6.gateway && cidrhost(var.network.ipv6.cidr, 2) == var.network.ipv6.address, false)
+    error_message = "network.ipv6 must be a canonical ULA /64 with gateway/guest offsets 1/2, or null."
   }
 }
 variable "started" {

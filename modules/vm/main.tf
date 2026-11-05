@@ -54,6 +54,13 @@ resource "proxmox_virtual_environment_vm" "this" {
         address = "${var.network.address}/30"
         gateway = var.network.gateway
       }
+      dynamic "ipv6" {
+        for_each = var.network.ipv6 == null ? [] : [var.network.ipv6]
+        content {
+          address = "${ipv6.value.address}/64"
+          gateway = ipv6.value.gateway
+        }
+      }
     }
     user_account {
       username = var.username
@@ -79,6 +86,10 @@ resource "proxmox_virtual_environment_firewall_ipset" "this" {
   # Proxmox returns single IPv4 hosts without /32. Match that canonical form
   # so the provider does not replace an otherwise unchanged anti-spoofing set.
   cidr { name = var.network.address }
+  dynamic "cidr" {
+    for_each = var.network.ipv6 == null ? [] : [var.network.ipv6.address, "::"]
+    content { name = cidr.value }
+  }
 }
 resource "proxmox_virtual_environment_firewall_options" "this" {
   node_name     = var.node_name

@@ -56,6 +56,13 @@ resource "proxmox_virtual_environment_container" "this" {
         address = "${var.network.address}/30"
         gateway = var.network.gateway
       }
+      dynamic "ipv6" {
+        for_each = var.network.ipv6 == null ? [] : [var.network.ipv6]
+        content {
+          address = "${ipv6.value.address}/64"
+          gateway = ipv6.value.gateway
+        }
+      }
     }
     user_account { keys = var.ssh_public_keys }
   }

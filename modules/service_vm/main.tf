@@ -22,7 +22,15 @@ variable "proxmox_ssh" {
   type    = object({ host = string, user = string, port = optional(number, 22), host_key = optional(string) })
   default = null
 }
-variable "network" { type = object({ address = string, gateway = string, cidr = string, vnet_id = string }) }
+variable "network" { type = object({ address = string, gateway = string, cidr = string, vnet_id = string, ipv6 = optional(object({ cidr = string, gateway = string, address = string })) }) }
+variable "ipv6_forwarded_ports" {
+  type    = list(number)
+  default = []
+}
+variable "protected_ipv6_cidrs" {
+  type    = list(string)
+  default = []
+}
 variable "protected_cidrs" { type = list(string) }
 variable "dns_servers" { type = list(string) }
 variable "domain" {
@@ -61,6 +69,8 @@ module "vm" {
   vm_template_id         = var.guest.vm_template_id
   datastore_id           = var.guest.datastore_id
   network                = var.network
+  ipv6_forwarded_ports   = var.ipv6_forwarded_ports
+  protected_ipv6_cidrs   = var.protected_ipv6_cidrs
   started                = var.guest.started
   on_boot                = var.guest.on_boot
   cores                  = var.guest.cores
