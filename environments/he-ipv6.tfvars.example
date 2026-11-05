@@ -1,0 +1,18 @@
+# Copy to environments/he-ipv6.tfvars (ignored by Git).
+# Pass this SAME file to BOTH roots using -var-file=../he-ipv6.tfvars.
+# Enable: host-config then home. Disable: home then host-config; retain SSH until cleanup finishes.
+he_ipv6 = {
+  enabled       = false
+  server_ipv4   = "192.0.2.1"
+  local_ipv4    = "192.168.50.10"
+  client_ipv6   = "2001:db8:1::2/64"
+  server_ipv6   = "2001:db8:1::1"
+  routed_prefix = "2001:db8:2::/64"
+  ula_prefix    = "fd42:77:1::/48" # Choose a unique, stable ULA /48 for your site.
+  mtu           = 1480
+  port_forwards = {
+    http  = { guest = "proxy-public", port = 80 }
+    https = { guest = "proxy-public", port = 443 }
+  }
+  # Outgoing IPv6 inherits effective global/per-guest/role internet_egress_ports.
+}
