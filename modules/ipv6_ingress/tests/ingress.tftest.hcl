@@ -37,3 +37,10 @@ run "reject_bad_target" {
   variables { forwards = { bad = { guest = "proxy", port = 443, address = "2001:db8::2", vnet_id = "hsp1002" } } }
   expect_failures = [var.forwards]
 }
+run "related_mtu_errors_precede_protected_source_drops" {
+  command = plan
+  assert {
+    condition     = strcontains(split("iifname \"hsp-he6\" ip6 saddr", system_file.ingress_rules.content)[0], "ct state related meta l4proto ipv6-icmp")
+    error_message = "Errors for owned NAT flows, including PTB from the protected tunnel peer, must precede application-source protection."
+  }
+}

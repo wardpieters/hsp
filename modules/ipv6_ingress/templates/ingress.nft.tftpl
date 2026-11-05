@@ -27,6 +27,14 @@ table ip6 hsp_he_ingress {
     # NDP is local control traffic, never routed from the HE tunnel.
     iifname != "hsp-he6" meta l4proto ipv6-icmp icmpv6 type { 135, 136 } ip6 saddr { ${ula}, fe80::/10, ::/128 } ip6 daddr { ${ula}, fe80::/10, ff02::1:ff00:0/104, ff02::1/128 } accept
     meta l4proto ipv6-icmp icmpv6 type { 130, 131, 132, 133, 134, 135, 136, 137, 143 } drop
+    # A legitimate tunnel peer/router may itself be in a protected prefix.
+    # Permit only errors belonging to currently authorized NAT tuples first.
+%{ for f in forwards ~}
+    ct state related meta l4proto ipv6-icmp icmpv6 type { 1, 2, 3, 4 } ct status dnat ct original ip6 daddr ${public} ct original protocol 6 ct original proto-dst ${f.port} ct reply ip6 saddr ${f.address} accept
+%{ endfor ~}
+%{ for e in egress ~}
+    ct state related meta l4proto ipv6-icmp icmpv6 type { 1, 2, 3, 4 } ct status snat ct original ip6 saddr ${e.address} ct reply ip6 daddr ${public} ct original protocol ${e.number} %{ if e.port != null }ct original proto-dst ${e.port} %{ endif }accept
+%{ endfor ~}
 %{ for c in protected ~}
     iifname "hsp-he6" ip6 saddr ${c} drop
     oifname "hsp-he6" ip6 daddr ${c} drop
