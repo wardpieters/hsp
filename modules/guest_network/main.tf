@@ -15,6 +15,17 @@ variable "slot" {
 }
 
 variable "zone_id" { type = string }
+variable "ipv6_cidr" {
+  type    = string
+  default = null
+  validation {
+    condition = var.ipv6_cidr == null ? true : try(
+      strcontains(var.ipv6_cidr, ":") && split("/", var.ipv6_cidr)[1] == "64" &&
+      cidrhost(var.ipv6_cidr, 0) == split("/", var.ipv6_cidr)[0] &&
+    cidrhost("${split("/", var.ipv6_cidr)[0]}/8", 0) == "fd00::", false)
+    error_message = "ipv6_cidr must be a canonical ULA /64 or null."
+  }
+}
 variable "vnet_id" {
   type = string
   validation {
@@ -50,8 +61,27 @@ resource "terraform_data" "revision" {
   }
 }
 
+resource "proxmox_sdn_subnet" "ipv6" {
+  count   = var.ipv6_cidr == null ? 0 : 1
+  vnet    = proxmox_sdn_vnet.this.id
+  cidr    = var.ipv6_cidr
+  gateway = cidrhost(var.ipv6_cidr, 1)
+  snat    = false
+}
+output "ipv6" {
+  value = var.ipv6_cidr == null ? null : {
+    cidr = var.ipv6_cidr, gateway = cidrhost(var.ipv6_cidr, 1), address = cidrhost(var.ipv6_cidr, 2)
+  }
+}
+
 output "cidr" { value = local.cidr }
 output "gateway" { value = local.gateway }
 output "address" { value = local.address }
 output "vnet_id" { value = proxmox_sdn_vnet.this.id }
-output "revision" { value = terraform_data.revision.id }
+resource "terraform_data" "ipv6_revision" {
+  count = var.ipv6_cidr == null ? 0 : 1
+  lifecycle { replace_triggered_by = [proxmox_sdn_subnet.ipv6[count.index]] }
+}
+output "revision" {
+  value = var.ipv6_cidr == null ? terraform_data.revision.id : sha256(jsonencode([terraform_data.revision.id, terraform_data.ipv6_revision[0].id]))
+}

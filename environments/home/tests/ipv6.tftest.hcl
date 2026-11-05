@@ -29,6 +29,17 @@ variables {
   }
   connections = []
 }
+run "egress_only_global_udp_selects_all_guests" {
+  command = plan
+  variables {
+    he_ipv6               = { "enabled" : true, "server_ipv4" : "216.66.84.46", "local_ipv4" : "192.168.100.10", "client_ipv6" : "2001:470:1f14:4d4::2/64", "server_ipv6" : "2001:470:1f14:4d4::1", "routed_prefix" : "2001:470:1f15:4d6::/64", "ula_prefix" : "fd42:77:1::/48", "port_forwards" : {} }
+    internet_egress_ports = [{ protocol = "udp", port = 123 }]
+  }
+  assert {
+    condition     = module.network.networks["proxy-public"].ipv6.address == "fd42:77:1:2::2" && module.network.networks["cloud"].ipv6.address == "fd42:77:1:1::2"
+    error_message = "Global effective egress must give both guests independent ULA subnets without public forwards."
+  }
+}
 run "reject_ipv6_server_in_ipv4_field" {
   command = plan
   variables { he_ipv6 = { "enabled" : true, "server_ipv4" : "2001::", "local_ipv4" : "192.168.100.10", "client_ipv6" : "2001:470:1f14:4d4::2/64", "server_ipv6" : "2001:470:1f14:4d4::1", "routed_prefix" : "2001:470:1f15:4d6::/64", "ula_prefix" : "fd42:77:1::/48", "port_forwards" : { "https" : { "guest" : "proxy-public", "port" : 443 } } } }

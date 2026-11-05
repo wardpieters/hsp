@@ -57,6 +57,9 @@ locals {
 }
 
 locals {
+  he_ipv6_participants = var.he_ipv6.enabled ? toset([for name, g in var.guests : name if
+    contains([for f in values(var.he_ipv6.port_forwards) : f.guest], name) || length(local.effective_internet_egress_ports[name]) > 0
+  ]) : toset([])
   effective_internet_egress_ports = { for name, g in var.guests : name => distinct(concat(
     var.internet_egress_ports, g.internet_egress_ports,
     g.role == "monitoring" ? [{ protocol = "tcp", port = 80 }, { protocol = "tcp", port = 443 }] : []

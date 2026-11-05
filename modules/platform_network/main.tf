@@ -31,11 +31,15 @@ variable "protected_cidrs" {
   }
 }
 variable "networks" {
-  type    = map(object({ slot = number, vnet_id = string }))
+  type    = map(object({ slot = number, vnet_id = string, ipv6_cidr = optional(string) }))
   default = {}
   validation {
     condition     = length(distinct([for n in values(var.networks) : n.slot])) == length(var.networks) && length(distinct([for n in values(var.networks) : n.vnet_id])) == length(var.networks)
     error_message = "Every guest needs a unique subnet slot and VNet ID."
+  }
+  validation {
+    condition     = length(distinct([for n in values(var.networks) : n.ipv6_cidr if n.ipv6_cidr != null])) == length([for n in values(var.networks) : n.ipv6_cidr if n.ipv6_cidr != null])
+    error_message = "IPv6 subnets must be unique across isolated VNets."
   }
 }
 
@@ -57,12 +61,16 @@ module "guest" {
   slot          = each.value.slot
   zone_id       = proxmox_sdn_zone_simple.this.id
   vnet_id       = each.value.vnet_id
+  ipv6_cidr     = each.value.ipv6_cidr
 }
 resource "terraform_data" "generation" {
-  input = {
-    cidr               = var.platform_cidr, zone = var.zone_id, node = var.node_name, networks = var.networks,
+  input = merge({
+    cidr               = var.platform_cidr, zone = var.zone_id, node = var.node_name,
+    networks           = { for name, n in var.networks : name => { slot = n.slot, vnet_id = n.vnet_id } },
     resource_revisions = { for name, guest in module.guest : name => guest.revision }
-  }
+    }, anytrue([for n in values(var.networks) : n.ipv6_cidr != null]) ? {
+    ipv6_networks = { for name, n in var.networks : name => n.ipv6_cidr if n.ipv6_cidr != null }
+  } : {})
   lifecycle { replace_triggered_by = [proxmox_sdn_zone_simple.this] }
 }
 # The provider labels the applier experimental; the SDN and packet filtering
@@ -75,7 +83,7 @@ resource "proxmox_sdn_applier" "apply" {
 }
 output "networks" {
   value = { for name, n in module.guest : name => {
-    cidr = n.cidr, gateway = n.gateway, address = n.address, vnet_id = n.vnet_id
+    cidr = n.cidr, gateway = n.gateway, address = n.address, vnet_id = n.vnet_id, ipv6 = n.ipv6
   } }
   depends_on = [proxmox_sdn_applier.apply]
 }
