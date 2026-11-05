@@ -13,3 +13,9 @@ Verified on 2026-10-30 with Terraform 1.14.8 and Node.js 24: all eight configura
 The tests exercise address bounds/overlaps, stable slots, DNS targets, firewall ordering, inventory/role restrictions, SDN repair/apply lifecycles, and host-file repair/service triggers. Provider mocks cannot prove real packet filtering, systemd command execution, Pi-hole behavior, or reboot persistence. Those checks remain in the [deployment guide](deployment.md).
 
 The host startup regression also checks that the `pve-guests` drop-in uses startup checks without a `Requires` relationship. That relationship could propagate an explicit routing stop into Proxmox's node-wide guest shutdown action. This is a configuration regression test, not a live systemd execution test.
+
+## Optional HE IPv6 (2026-11-05)
+
+HE is default-off and is verified offline with pinned providers. Mock-provider tests cover shared configuration and address-family validation, ULA allocation, SDN repair/removal, VM/LXC initialization, ordered guest/host control policy, effective global/per-guest/role TCP/UDP/ICMP egress, outputs and toggle transitions. Node subprocess tests execute the actual Terraform-rendered helpers against isolated fake ip/nft/sysctl/conntrack tools, exercising ownership collisions, partial failure, selective NAT revocation, retained flows and failure guards. A PMTU regression checks related errors precede protected-source drops.
+
+The checks are `make check`, `make docs-build`, and `git diff --check`; no real host network commands are used by the helper tests. These checks do not prove Linux nft syntax, legacy bridge/conntrack packet paths, live HE transport, public DNS, mail delivery or reboot persistence. Those remain the operator's [IPv6 live acceptance checks](ipv6.md#live-acceptance). No live apply, router/old-endpoint operation, public DNS change or guest restart was performed by this implementation.

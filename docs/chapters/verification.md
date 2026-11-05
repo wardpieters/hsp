@@ -17,3 +17,5 @@ The [implementation verification record](../verification.md) preserves the test 
 | Packet filtering, routing, and reboot persistence | [Live acceptance and removal](../deployment.md#live-acceptance-and-removal) |
 
 For the reasoning behind the implementation, continue to the [engineering records](engineering.md).
+
+- [IPv6 packet, PMTU, revocation and reboot acceptance](../ipv6.md)

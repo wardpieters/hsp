@@ -196,6 +196,10 @@ Confirm the aggregate is unused across existing LAN/guest/VPN networks, the esta
 
 Writing the unit file alone does not execute it. The service resource enables and starts it during this apply. Neither activation nor `Before=pve-guests.service` restarts existing guests. The startup drop-in takes effect on future Proxmox guest-service starts; do not manually restart `pve-guests.service` to test it. If an older `Requires`-based drop-in was already applied, update that drop-in and reload systemd before stopping/replacing the routing service.
 
+## Optional HE IPv6
+
+Use the [IPv6 deployment guide](ipv6.md) for the default-off shared toggle, Proxmox tunnel/VIP, isolated ULA guest networks, TCP DNAT and permitted TCP/UDP/ICMP SNAT. Both roots must receive the same `-var-file=../he-ipv6.tfvars`; host-config applies first when enabling and home first when disabling. Public DNS and the old endpoint/EdgeRouter cutover remain manual. Home needs `proxmox_ssh` when HE is enabled; retain its settings through cleanup. Local DNS remains IPv4-only.
+
 ## Declare local DNS records
 
 Set the required `domain` variable in `home.tfvars` (for example, `domain = "home.example.com"`); it has no default. Each guest's `dns` map is passed to `modules/dns_records`, which appends this domain to each alias and manages `pihole_dns_record` resources through Pi-hole's local DNS API. `direct` resolves to the guest IP; `proxy` resolves to a declared proxy guest (`proxy_name`) or an external proxy IP (`proxy_address`); `none` creates no record. The inventory example shows both direct and proxy aliases. Removing an alias removes its Terraform-owned record.

@@ -22,3 +22,5 @@ The [deployment guide](../deployment.md) describes the full Terraform workflow. 
 11. [Live acceptance and removal](../deployment.md#live-acceptance-and-removal) — packet checks, persistence, and cleanup.
 
 Use the [firewall and access chapter](firewall.md) alongside this guide when configuring services and dependencies.
+
+- [Optional HE tunnel, port forwards, egress and cutover](../ipv6.md)

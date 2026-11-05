@@ -109,3 +109,6 @@ connections = [
   # { from = "http-proxy", to = "172.16.10.30", protocol = "tcp", port = 80 },
   # { from = "http-proxy", to = "172.16.10.30", protocol = "tcp", port = 443 },
 ]
+
+# Optional IPv6: copy ../he-ipv6.tfvars.example and pass -var-file=../he-ipv6.tfvars to BOTH roots.
+# HE inherits global/per-guest/role internet_egress_ports; local DNS stays IPv4-only.

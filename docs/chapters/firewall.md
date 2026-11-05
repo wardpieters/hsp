@@ -29,3 +29,5 @@ The [role and firewall reference](../firewall-roles.md) documents the policies g
 - [Inspect the generated configuration](../firewall-roles.md#inspect-the-generated-configuration)
 
 Continue with [verification](verification.md) to understand the checks behind the configuration.
+
+- [IPv6 DNAT, effective egress and isolation](../ipv6.md)

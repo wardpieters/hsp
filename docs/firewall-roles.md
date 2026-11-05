@@ -25,8 +25,8 @@ VPN/proxy software, user authentication, TLS, DNS aliases, and reverse proxy hos
 ## Shared rules for every role
 
 - Incoming and outgoing default policies are `DROP`.
-- The guest NIC firewall is enabled, MAC filtering is enabled, and `ipfilter-net0` permits only the guest's assigned IPv4 address as its source. The entry uses a bare IP, equivalent to `/32`, because Proxmox removes `/32` on read-back; matching that form avoids unnecessary IP-set replacements.
-- Incoming and outgoing IPv6 are explicitly dropped. DHCP, NDP, and router advertisement allowances are disabled.
+- The guest NIC firewall is enabled, MAC filtering is enabled, and `ipfilter-net0` permits the assigned IPv4 source; HE participants also receive their single assigned ULA and the unspecified address for tightly scoped DAD. Native MAC-derived link-local filtering remains. The entry uses a bare IP, equivalent to `/32`, because Proxmox removes `/32` on read-back; matching that form avoids unnecessary IP-set replacements.
+- With HE off (the default), incoming/outgoing IPv6 are explicitly dropped. [Optional HE IPv6](ipv6.md) assigns private IPv6 to guests with mapped ingress or effective internet egress, permits only those application rules plus scoped NDP/DAD/errors, and retains default deny. DHCP, automatic NDP and router-advertisement allowances stay disabled.
 - Outgoing DNS to each `dns_servers` IP is allowed on TCP and UDP 53, independently of `internet_egress_ports`.
 - Outgoing NTP to each `ntp_servers` IP is allowed on UDP 123, independently of `internet_egress_ports`.
 - LAN, other guest networks, host addresses, and the protected ranges are blocked except where an earlier explicit exception allows traffic.
@@ -119,7 +119,7 @@ internet_egress_ports = [
 ]
 ```
 
-Each entry accepts `tcp` or `udp` with an integer port from 1 to 65535, or `icmp` with `port` omitted or set to `null`. A numeric port on an ICMP entry is rejected. ICMP permits all IPv4 ICMP types, including ping; it does not add an incoming allowance, and replies use the stateful firewall. Allowed destinations cover IPv4 addresses outside the protected ranges; these rules do not restrict access to specific websites or package repositories. IPv6 remains blocked. The former `allow_updates` flag has been replaced by this list. Only the `monitoring` role receives automatic TCP 80/443 internet access; other roles require explicit entries.
+Each entry accepts `tcp` or `udp` with an integer port from 1 to 65535, or `icmp` with `port` omitted or set to `null`. A numeric port on an ICMP entry is rejected. ICMP permits all IPv4 ICMP types, including ping; it does not add an incoming allowance, and replies use the stateful firewall. Allowed destinations cover IPv4 addresses outside the protected ranges; these rules do not restrict access to specific websites or package repositories. IPv6 remains blocked with HE off. With HE enabled, the same effective permissions also allow IPv6 TCP/UDP and portless ICMPv6 through the shared public source address, after protected/control drops. Egress-only guests receive IPv6 without a public forward. The former `allow_updates` flag has been replaced by this list. Only the `monitoring` role receives automatic TCP 80/443 internet access; other roles require explicit entries.
 
 With both lists empty, replies to permitted inbound connections, approved DNS/NTP targets, and declared guest/IP dependencies remain allowed. `public_ports` controls incoming services separately. DNS and NTP targets remain allowed even if you configure external resolver or time-server addresses.
 
@@ -150,7 +150,7 @@ DNS target selection and firewall dependencies are configured separately. For ex
 
 Rules are generated in this order, with the default DROP policy handling anything left unmatched:
 
-1. Drop IPv6 incoming and outgoing.
+1. Apply IPv6 policy: blanket incoming/outgoing drops by default; for HE participants, scoped control traffic and protected-network drops before mapped TCP ingress/effective internet egress. The remaining rules below are IPv4.
 2. Allow enabled bootstrap SSH, declared dependencies, and role-generated dependencies, including admin VPN management access.
 3. Allow configured LAN service sources to reach the selected private proxy on TCP 443, then approved DNS and NTP destinations.
 4. Allow configured LAN sources to reach declared public ports.
@@ -181,3 +181,9 @@ terraform -chdir=environments/home output public_forwards
 `host_policy` is generated even when host firewall management is disabled; its presence does not prove that the policy was applied. Check effective rules and packet behavior on Proxmox during the [deployment acceptance checks](deployment.md#live-acceptance-and-removal).
 
 The source of truth is [role/dependency generation](../environments/home/policy.tf), [inventory validation](../environments/home/variables.tf), [shared guest rule generation](../modules/vm/policy.tf), and [firewall resource configuration](../modules/vm/main.tf).
+
+## Optional IPv6 forwarding and egress
+
+[The IPv6 guide](ipv6.md) explains the single shared public address, explicit TCP `he_ipv6.port_forwards`, and per-slot ULA /64s. A forwarded port must also be in the guest's TCP `public_ports`; an IPv4 public-port declaration alone does not enable IPv6 ingress. Existing named connections, role-based guest administration and monitoring dependencies stay IPv4-only. Global/per-guest/role internet permissions apply to IPv6 when HE is on; a global UDP123 entry selects every guest for IPv6. Configured outgoing ICMP includes ping; RA/RS/redirect/nonlocal NDP remain denied, and no incoming ping is automatically opened.
+
+The host's independent HE INPUT guard closes undeclared listeners even when `manage_host_firewall = false`. In that mode, additional transport/control acceptance remains operator-owned and is described by `ipv6_host_requirements`; no full node-firewall takeover occurs. Required related ICMPv6 errors precede application-source protection, including errors from a protected tunnel peer. Native guest source/MAC filters and protected networks remain enforced.
