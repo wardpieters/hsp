@@ -21,4 +21,5 @@ module "proxmox" {
   source        = "../../modules/proxmox_host"
   providers     = { system = system.proxmox }
   platform_cidr = var.platform_cidr
+  he_ipv6       = var.he_ipv6.enabled ? var.he_ipv6 : null
 }

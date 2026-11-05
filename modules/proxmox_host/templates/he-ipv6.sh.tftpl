@@ -1,0 +1,115 @@
+#!/bin/sh
+# hsp-network-helper: HE routing, with ownership checked before mutation.
+set -eu
+umask 077
+runtime=$${RUNTIME_DIRECTORY:-/run/hsp-he-ipv6}
+remote='${server_ipv4}'
+local4='${local_ipv4}'
+client='${client_ipv6}'
+gateway='${server_ipv6}'
+prefix='${routed_prefix}'
+ula='${ula_prefix}'
+vip='${public_address}'
+mtu='${mtu}'
+table=hsp_he_host
+owner=hsp:he-host:v1
+die() { echo "$*" >&2; exit 1; }
+exists() { ip -d -o link show dev "$1" 2>/dev/null; }
+check_link() {
+  if details=$(exists "$1"); then
+    [ -f "$runtime/state" ] || die "Unowned interface $1; refusing collision"
+    echo "$details" | grep -F "alias hsp:$1" >/dev/null || die "Foreign replacement of $1"
+  fi
+}
+check_table() {
+  if details=$(nft list table ip6 "$table" 2>/dev/null); then
+    [ -f "$runtime/state" ] || die "Unowned host table collision"
+    echo "$details" | grep -F "$owner" >/dev/null || die "Foreign host table collision"
+  fi
+}
+case "$${1:-}" in start|reload|stop) ;; *) die "Expected start|reload|stop" ;; esac
+for tool in ip nft sysctl; do command -v "$tool" >/dev/null || die "Missing prerequisite: $tool"; done
+check_link hsp-he6
+check_link hsp-vip6
+check_table
+if [ "$1" = stop ]; then
+  # Withdraw public addresses/transport before removing the input guard.
+  if exists hsp-vip6 >/dev/null; then ip link delete dev hsp-vip6; fi
+  if exists hsp-he6 >/dev/null; then ip link delete dev hsp-he6; fi
+  if [ -f "$runtime/state" ]; then
+    old_prefix=$(sed -n '1p' "$runtime/state")
+    if ip -6 route show "$old_prefix" | grep -F "blackhole $old_prefix" | grep -E "metric 42761( |$)" >/dev/null; then
+      ip -6 route del blackhole "$old_prefix" metric 42761
+    fi
+  fi
+  if nft list table ip6 "$table" >/dev/null 2>&1; then nft delete table ip6 "$table"; fi
+  rm -f "$runtime/state" "$runtime/guard.nft"
+  exit 0
+fi
+if [ -f "$runtime/state" ]; then
+  [ "$(sed -n '1p' "$runtime/state")" = "$prefix" ] && [ "$(sed -n '2p' "$runtime/state")" = "$ula" ] || die "Disable both roots before topology changes"
+fi
+routes=$(ip -6 route show default)
+routes=$(printf '%s\n' "$routes" | grep -E 'metric 42761( |$)' || :)
+if [ -n "$routes" ]; then
+  [ -f "$runtime/state" ] && echo "$routes" | grep -F 'dev hsp-he6' >/dev/null || die "Reserved default route collision"
+fi
+if ip -6 route show "$prefix" | grep -F "blackhole $prefix" | grep -E "metric 42761( |$)" >/dev/null; then
+  [ -f "$runtime/state" ] || die "Reserved blackhole route collision"
+fi
+mkdir -p "$runtime"
+chmod 700 "$runtime"
+printf '%s\n%s\n' "$prefix" "$ula" > "$runtime/state"
+{
+  if nft list table ip6 "$table" >/dev/null 2>&1; then echo "delete table ip6 $table"; fi
+  cat <<NFT
+table ip6 $table {
+  comment "$owner"
+  chain input {
+    type filter hook input priority -10; policy accept;
+    iifname "hsp-he6" meta l4proto ipv6-icmp icmpv6 type { 1, 2, 3, 4 } accept
+    iifname "hsp-he6" drop
+    ip6 daddr $vip meta l4proto ipv6-icmp icmpv6 type { 1, 2, 3, 4 } accept
+    ip6 daddr $vip drop
+    ip6 daddr $ula ip6 saddr { $ula, fe80::/10, ::/128 } meta l4proto ipv6-icmp icmpv6 type { 135, 136 } accept
+    ip6 daddr $ula meta l4proto ipv6-icmp icmpv6 type { 1, 2, 3, 4 } accept
+    ip6 daddr $ula drop
+  }
+}
+NFT
+} > "$runtime/guard.nft"
+nft -c -f "$runtime/guard.nft"
+nft -f "$runtime/guard.nft"
+created_sit=0
+created_vip=0
+rollback() {
+  status=$?
+  trap - EXIT
+  if [ "$status" -ne 0 ]; then
+    if [ "$created_vip" = 1 ]; then ip link delete dev hsp-vip6 || :; fi
+    if [ "$created_sit" = 1 ]; then ip link delete dev hsp-he6 || :; fi
+    # The input guard and ownership manifest intentionally remain for repair.
+  fi
+  exit "$status"
+}
+trap rollback EXIT
+if ! exists hsp-he6 >/dev/null; then
+  ip tunnel add hsp-he6 mode sit local "$local4" remote "$remote" ttl 255
+  created_sit=1
+  ip link set dev hsp-he6 alias hsp:hsp-he6
+else
+  ip tunnel change hsp-he6 mode sit local "$local4" remote "$remote" ttl 255
+fi
+if ! exists hsp-vip6 >/dev/null; then
+  ip link add hsp-vip6 type dummy
+  created_vip=1
+  ip link set dev hsp-vip6 alias hsp:hsp-vip6
+fi
+ip link set dev hsp-he6 mtu "$mtu" up
+ip link set dev hsp-vip6 up
+ip -6 address flush dev hsp-he6 scope global
+ip -6 address replace "$client" dev hsp-he6
+ip -6 address replace "$vip/128" dev hsp-vip6
+sysctl -w net.ipv6.conf.all.forwarding=1
+ip -6 route replace blackhole "$prefix" metric 42761
+ip -6 route replace default via "$gateway" dev hsp-he6 metric 42761

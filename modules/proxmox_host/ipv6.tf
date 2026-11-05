@@ -1,0 +1,97 @@
+variable "he_ipv6" {
+  type = object({
+    server_ipv4   = string, local_ipv4 = string, client_ipv6 = string, server_ipv6 = string,
+    routed_prefix = string, ula_prefix = string, mtu = optional(number, 1480)
+  })
+  default = null
+  validation {
+    condition = var.he_ipv6 == null ? true : try(
+      can(cidrnetmask("${var.he_ipv6.server_ipv4}/32")) && can(cidrnetmask("${var.he_ipv6.local_ipv4}/32")) &&
+      strcontains(var.he_ipv6.client_ipv6, ":") && split("/", var.he_ipv6.client_ipv6)[1] == "64" &&
+      cidrhost("${var.he_ipv6.server_ipv6}/64", 0) == cidrhost(var.he_ipv6.client_ipv6, 0) &&
+      cidrhost("${var.he_ipv6.server_ipv6}/128", 0) != cidrhost("${split("/", var.he_ipv6.client_ipv6)[0]}/128", 0) &&
+      split("/", var.he_ipv6.routed_prefix)[1] == "64" && cidrhost(var.he_ipv6.routed_prefix, 0) == split("/", var.he_ipv6.routed_prefix)[0] &&
+      cidrhost("${split("/", var.he_ipv6.routed_prefix)[0]}/3", 0) == "2000::" &&
+      cidrhost(var.he_ipv6.routed_prefix, 0) != cidrhost(var.he_ipv6.client_ipv6, 0) &&
+      split("/", var.he_ipv6.ula_prefix)[1] == "48" && cidrhost(var.he_ipv6.ula_prefix, 0) == split("/", var.he_ipv6.ula_prefix)[0] &&
+      cidrhost("${split("/", var.he_ipv6.ula_prefix)[0]}/8", 0) == "fd00::" &&
+    var.he_ipv6.mtu >= 1280 && var.he_ipv6.mtu <= 1480 && floor(var.he_ipv6.mtu) == var.he_ipv6.mtu, false)
+    error_message = "HE host routing requires valid IPv4 endpoints, distinct tunnel IPv6 addresses in one /64, a separate global service /64, ULA /48 and integer MTU 1280..1480."
+  }
+}
+locals {
+  he_public_address = var.he_ipv6 == null ? null : cidrhost(var.he_ipv6.routed_prefix, 2)
+}
+resource "system_folder" "he_helper" {
+  count = var.he_ipv6 == null ? 0 : 1
+  path  = "/usr/local/lib/hsp-he-ipv6"
+  uid   = 0
+  gid   = 0
+  mode  = "700"
+}
+resource "system_file" "he_helper" {
+  count   = var.he_ipv6 == null ? 0 : 1
+  path    = "${system_folder.he_helper[0].path}/routing.sh"
+  content = templatefile("${path.module}/templates/he-ipv6.sh.tftpl", merge(var.he_ipv6, { public_address = local.he_public_address }))
+  uid     = 0
+  gid     = 0
+  mode    = "700"
+}
+resource "system_file" "he_sysctl" {
+  count   = var.he_ipv6 == null ? 0 : 1
+  path    = "/etc/sysctl.d/90-hsp-he-ipv6.conf"
+  content = "# Managed by HSP; other networking may also depend on forwarding.\nnet.ipv6.conf.all.forwarding=1\n"
+  uid     = 0
+  gid     = 0
+  mode    = "644"
+}
+resource "system_file" "he_unit" {
+  count   = var.he_ipv6 == null ? 0 : 1
+  path    = "/etc/systemd/system/hsp-he-ipv6.service"
+  content = <<-UNIT
+    [Unit]
+    Description=HSP guarded HE IPv6 tunnel and public address
+    Wants=network-online.target
+    Requires=pve-firewall.service
+    After=network-online.target pve-firewall.service
+
+    [Service]
+    Type=oneshot
+    RemainAfterExit=yes
+    Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin
+    RuntimeDirectory=hsp-he-ipv6
+    RuntimeDirectoryMode=0700
+    RuntimeDirectoryPreserve=yes
+    ExecStart=${system_file.he_helper[0].path} start
+    ExecReload=${system_file.he_helper[0].path} reload
+    ExecStop=${system_file.he_helper[0].path} stop
+
+    [Install]
+    WantedBy=multi-user.target
+  UNIT
+  uid     = 0
+  gid     = 0
+  mode    = "644"
+}
+resource "terraform_data" "he_revision" {
+  count = var.he_ipv6 == null ? 0 : 1
+  lifecycle { replace_triggered_by = [system_file.he_helper, system_file.he_unit, system_file.he_sysctl] }
+}
+resource "system_service_systemd" "he_ipv6" {
+  count     = var.he_ipv6 == null ? 0 : 1
+  name      = "hsp-he-ipv6"
+  enabled   = true
+  status    = "started"
+  reload_on = [terraform_data.he_revision[0].id]
+}
+output "he_ipv6_status" {
+  value = var.he_ipv6 == null ? null : {
+    interface  = "hsp-he6", vip_interface = "hsp-vip6", public_address = local.he_public_address,
+    local_ipv4 = var.he_ipv6.local_ipv4, remote_ipv4 = var.he_ipv6.server_ipv4,
+    local_ipv6 = var.he_ipv6.client_ipv6, remote_ipv6 = var.he_ipv6.server_ipv6,
+    ula_prefix = var.he_ipv6.ula_prefix, mtu = var.he_ipv6.mtu, route_metric = 42761
+  }
+}
+output "he_ipv6_generation" {
+  value = var.he_ipv6 == null ? null : terraform_data.he_revision[0].id
+}

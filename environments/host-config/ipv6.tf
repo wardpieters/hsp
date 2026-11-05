@@ -45,3 +45,5 @@ variable "he_ipv6" {
 locals {
   he_ipv6_public_address = var.he_ipv6.enabled ? try(cidrhost(var.he_ipv6.routed_prefix, 2), null) : null
 }
+
+output "he_ipv6_status" { value = module.proxmox.he_ipv6_status }
