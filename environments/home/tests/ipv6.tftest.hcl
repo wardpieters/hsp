@@ -1,3 +1,4 @@
+mock_provider "system" { alias = "ingress" }
 mock_provider "restful" {
   override_during = plan
   mock_data "restful_resource" {
@@ -36,7 +37,7 @@ run "egress_only_global_udp_selects_all_guests" {
     internet_egress_ports = [{ protocol = "udp", port = 123 }]
   }
   assert {
-    condition     = module.network.networks["proxy-public"].ipv6.address == "fd42:77:1:2::2" && module.network.networks["cloud"].ipv6.address == "fd42:77:1:1::2"
+    condition     = module.network.networks["proxy-public"].ipv6.address == "fd42:77:1:2::2" && module.network.networks["cloud"].ipv6.address == "fd42:77:1:1::2" && length(output.ipv6_egress) == 2 && length(module.ipv6_ingress) == 1 && length(proxmox_virtual_environment_firewall_rules.host) == 0
     error_message = "Global effective egress must give both guests independent ULA subnets without public forwards."
   }
 }
@@ -308,4 +309,69 @@ run "reject_udp_only_forward_target" {
     guests  = { proxy-public = { vm_id = 1002, slot = 2, vnet_id = "hsp1002", public_ports = [{ protocol = "udp", port = 443 }] } }
   }
   expect_failures = [var.he_ipv6]
+}
+run "mixed_vm_lxc_effective_egress" {
+  command = apply
+  variables {
+    he_ipv6               = { "enabled" : true, "server_ipv4" : "216.66.84.46", "local_ipv4" : "192.168.100.10", "client_ipv6" : "2001:470:1f14:4d4::2/64", "server_ipv6" : "2001:470:1f14:4d4::1", "routed_prefix" : "2001:470:1f15:4d6::/64", "ula_prefix" : "fd42:77:1::/48", "port_forwards" : { "https" : { "guest" : "proxy-public", "port" : 443 } } }
+    internet_egress_ports = [{ "protocol" : "udp", "port" : 123 }]
+    guests                = { "proxy-public" : { "vm_id" : 1002, "slot" : 2, "vnet_id" : "hsp1002", "role" : "public_proxy", "public_ports" : [{ "protocol" : "tcp", "port" : 443 }] }, "cloud" : { "vm_id" : 101, "slot" : 1, "vnet_id" : "hsp101", "role" : "monitoring", "type" : "lxc", "internet_egress_ports" : [{ "protocol" : "tcp", "port" : 443 }, { "protocol" : "icmp" }] } }
+    lxc_template          = { file_id = "local:vztmpl/debian.tar.zst" }
+
+  }
+  assert {
+    condition     = toset([for p in output.ipv6_egress["cloud"].ports : "${p.protocol}:${p.port == null ? "none" : tostring(p.port)}"]) == toset(["tcp:80", "tcp:443", "udp:123", "icmp:none"]) && output.guests["cloud"].type == "lxc" && toset(keys(output.guests["cloud"])) == toset(["vm_id", "type", "address", "names", "started"])
+    error_message = "Root IPv6 integration must preserve effective permissions, isolation and legacy outputs."
+  }
+}
+run "retain_egress_after_last_forward" {
+  command = apply
+  variables {
+    he_ipv6               = { "enabled" : true, "server_ipv4" : "216.66.84.46", "local_ipv4" : "192.168.100.10", "client_ipv6" : "2001:470:1f14:4d4::2/64", "server_ipv6" : "2001:470:1f14:4d4::1", "routed_prefix" : "2001:470:1f15:4d6::/64", "ula_prefix" : "fd42:77:1::/48", "port_forwards" : {} }
+    internet_egress_ports = [{ "protocol" : "udp", "port" : 123 }]
+    guests                = { "proxy-public" : { "vm_id" : 1002, "slot" : 2, "vnet_id" : "hsp1002", "role" : "public_proxy", "public_ports" : [{ "protocol" : "tcp", "port" : 443 }] }, "cloud" : { "vm_id" : 101, "slot" : 1, "vnet_id" : "hsp101", "role" : "monitoring", "type" : "lxc", "internet_egress_ports" : [{ "protocol" : "tcp", "port" : 443 }, { "protocol" : "icmp" }] } }
+    lxc_template          = { file_id = "local:vztmpl/debian.tar.zst" }
+
+  }
+  assert {
+    condition     = length(output.ipv6_networks) == 2 && length(output.ipv6_port_forwards) == 0 && length(module.ipv6_ingress) == 1
+    error_message = "Root IPv6 integration must preserve effective permissions, isolation and legacy outputs."
+  }
+}
+run "no_participants" {
+  command = apply
+  variables {
+    he_ipv6               = { "enabled" : true, "server_ipv4" : "216.66.84.46", "local_ipv4" : "192.168.100.10", "client_ipv6" : "2001:470:1f14:4d4::2/64", "server_ipv6" : "2001:470:1f14:4d4::1", "routed_prefix" : "2001:470:1f15:4d6::/64", "ula_prefix" : "fd42:77:1::/48", "port_forwards" : {} }
+    internet_egress_ports = []
+
+  }
+  assert {
+    condition     = length(output.ipv6_networks) == 0 && length(module.ipv6_ingress) == 0
+    error_message = "Root IPv6 integration must preserve effective permissions, isolation and legacy outputs."
+  }
+}
+run "off_retains_ipv4_egress" {
+  command = apply
+  variables {
+    he_ipv6               = { "enabled" : false, "server_ipv4" : "216.66.84.46", "local_ipv4" : "192.168.100.10", "client_ipv6" : "2001:470:1f14:4d4::2/64", "server_ipv6" : "2001:470:1f14:4d4::1", "routed_prefix" : "2001:470:1f15:4d6::/64", "ula_prefix" : "fd42:77:1::/48", "port_forwards" : { "https" : { "guest" : "proxy-public", "port" : 443 } } }
+    internet_egress_ports = [{ "protocol" : "udp", "port" : 123 }]
+    guests                = { "proxy-public" : { "vm_id" : 1002, "slot" : 2, "vnet_id" : "hsp1002", "role" : "public_proxy", "public_ports" : [{ "protocol" : "tcp", "port" : 443 }] }, "cloud" : { "vm_id" : 101, "slot" : 1, "vnet_id" : "hsp101", "role" : "monitoring", "type" : "lxc", "internet_egress_ports" : [{ "protocol" : "tcp", "port" : 443 }, { "protocol" : "icmp" }] } }
+    lxc_template          = { file_id = "local:vztmpl/debian.tar.zst" }
+
+  }
+  assert {
+    condition     = output.ipv6_ingress == null && length(output.ipv6_egress) == 0 && length(module.ipv6_ingress) == 0 && output.guests["proxy-public"].address == "10.77.0.10"
+    error_message = "Root IPv6 integration must preserve effective permissions, isolation and legacy outputs."
+  }
+}
+run "managed_host_control_only" {
+  command = plan
+  variables {
+    he_ipv6              = { "enabled" : true, "server_ipv4" : "216.66.84.46", "local_ipv4" : "192.168.100.10", "client_ipv6" : "2001:470:1f14:4d4::2/64", "server_ipv6" : "2001:470:1f14:4d4::1", "routed_prefix" : "2001:470:1f15:4d6::/64", "ula_prefix" : "fd42:77:1::/48", "port_forwards" : { "https" : { "guest" : "proxy-public", "port" : 443 } } }
+    manage_host_firewall = true
+  }
+  assert {
+    condition     = length([for r in output.host_policy : r if r.proto == "41" && r.source == "216.66.84.46/32"]) == 1 && length([for r in output.host_policy : r if r.proto == "tcp" && r.source == "::/0" && r.action == "ACCEPT"]) == 0 && length(output.ipv6_host_requirements) > 0
+    error_message = "Managed host rules accept HE transport/control without public IPv6 management."
+  }
 }

@@ -31,7 +31,7 @@ module "service" {
   node_name              = var.node_name
   network                = module.network.networks[each.key]
   ipv6_forwarded_ports   = var.he_ipv6.enabled ? [for f in values(var.he_ipv6.port_forwards) : f.port if f.guest == each.key] : []
-  protected_ipv6_cidrs   = var.he_ipv6.enabled ? concat([var.he_ipv6.ula_prefix, var.he_ipv6.routed_prefix, "${cidrhost(var.he_ipv6.client_ipv6, 0)}/64"], var.he_ipv6.protected_cidrs) : []
+  protected_ipv6_cidrs   = local.he_ipv6_protected
   protected_cidrs        = concat([var.platform_cidr, "${var.host_address}/32"], var.protected_cidrs)
   dns_servers            = var.dns_servers
   domain                 = var.domain

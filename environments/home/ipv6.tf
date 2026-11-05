@@ -1,4 +1,17 @@
 # Pass the SAME -var-file=../he-ipv6.tfvars to home and host-config.
+# Missing teardown credentials fail against a reserved invalid hostname;
+# unused default-off configurations never connect or fall back to localhost.
+provider "system" {
+  alias = "ingress"
+  ssh {
+    host     = var.proxmox_ssh == null ? "disabled.invalid" : var.proxmox_ssh.host
+    user     = var.proxmox_ssh == null ? "root" : var.proxmox_ssh.user
+    port     = var.proxmox_ssh == null ? 22 : var.proxmox_ssh.port
+    host_key = var.proxmox_ssh == null ? null : var.proxmox_ssh.host_key
+    agent    = true
+  }
+  sudo = var.proxmox_ssh == null ? false : var.proxmox_ssh.user != "root"
+}
 variable "he_ipv6" {
   description = "Optional HE tunnel and shared public IPv6. Disabled unless explicitly enabled in both roots."
   type = object({
@@ -64,4 +77,44 @@ locals {
     var.internet_egress_ports, g.internet_egress_ports,
     g.role == "monitoring" ? [{ protocol = "tcp", port = 80 }, { protocol = "tcp", port = 443 }] : []
   )) }
+}
+locals {
+  he_ipv6_networks = { for name in local.he_ipv6_participants : name => merge(
+    module.network.networks[name].ipv6, { vnet_id = module.network.networks[name].vnet_id }
+  ) }
+  he_ipv6_forwards = var.he_ipv6.enabled ? { for key, f in var.he_ipv6.port_forwards : key => {
+    guest   = f.guest, port = f.port, address = module.network.networks[f.guest].ipv6.address,
+    vnet_id = var.guests[f.guest].vnet_id
+  } } : {}
+  he_ipv6_egress = { for name in local.he_ipv6_participants : name => {
+    address = local.he_ipv6_networks[name].address, vnet_id = var.guests[name].vnet_id,
+    ports   = local.effective_internet_egress_ports[name]
+  } if length(local.effective_internet_egress_ports[name]) > 0 }
+  he_ipv6_protected = var.he_ipv6.enabled ? concat(
+    [var.he_ipv6.ula_prefix, var.he_ipv6.routed_prefix, "${cidrhost(var.he_ipv6.client_ipv6, 0)}/64"], var.he_ipv6.protected_cidrs
+  ) : []
+  he_host_allow_rules = !var.he_ipv6.enabled ? [] : concat(
+    [merge(local.host_rule, {
+      source = "${var.he_ipv6.server_ipv4}/32", dest = "${var.host_address}/32", proto = "41", comment = "hsp:host:he-transport"
+    })],
+    [for kind in [1, 2, 3, 4] : merge(local.host_rule, {
+      source = "::/0", proto = "icmpv6", dport = tostring(kind), iface = "hsp-he6", comment = "hsp:host:he-error:${kind}"
+    })],
+    flatten([for name in local.he_ipv6_participants : [for kind in [135, 136] : merge(local.host_rule, {
+      source = join(",", concat(["${local.he_ipv6_networks[name].address}/128", "fe80::/10"], kind == 135 ? ["::/128"] : [])),
+      dest   = join(",", ["${local.he_ipv6_networks[name].gateway}/128", "fe80::/10", "ff02::1:ff00:0/104", "ff02::1/128"]),
+      proto  = "icmpv6", dport = tostring(kind), iface = var.guests[name].vnet_id, comment = "hsp:host:he-ndp:${name}:${kind}"
+    })]])
+  )
+}
+module "ipv6_ingress" {
+  count           = var.he_ipv6.enabled && (length(local.he_ipv6_forwards) > 0 || length(local.he_ipv6_egress) > 0) ? 1 : 0
+  source          = "../../modules/ipv6_ingress"
+  providers       = { system = system.ingress }
+  public_address  = local.he_ipv6_public_address
+  ula_prefix      = var.he_ipv6.ula_prefix
+  protected_cidrs = local.he_ipv6_protected
+  forwards        = local.he_ipv6_forwards
+  egress          = local.he_ipv6_egress
+  depends_on      = [module.network, module.service]
 }

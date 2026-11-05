@@ -45,6 +45,7 @@ locals {
   }]])
   host_rule = { type = "in", action = "ACCEPT", source = null, dest = null, proto = null, dport = null, iface = null, comment = "", enabled = true }
   host_rules = concat(
+    local.he_host_allow_rules,
     [for c in var.bootstrap_admin_cidrs : merge(local.host_rule, { source = c, proto = "tcp", dport = "22,8006", comment = "hsp:host:bootstrap:${c}" })],
     [for name in local.administrators : merge(local.host_rule, { source = "${module.network.networks[name].address}/32", proto = "tcp", dport = "22,8006", comment = "hsp:host:admin:${name}" })],
     [for n in values(var.guests) : merge(local.host_rule, { source = "::/0", iface = n.vnet_id, action = "DROP", comment = "hsp:host:deny-ipv6:${n.vnet_id}" })],

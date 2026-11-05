@@ -22,3 +22,24 @@ output "policies" {
 output "dns_targets" {
   value = { for d in local.dns_entries : d.name => d.mode == "proxy" ? d.proxy_address : module.network.networks[d.guest].address if d.mode != "none" }
 }
+output "ipv6_ingress" {
+  value = var.he_ipv6.enabled ? { public_address = local.he_ipv6_public_address, routed_prefix = var.he_ipv6.routed_prefix, ula_prefix = var.he_ipv6.ula_prefix } : null
+}
+output "ipv6_networks" { value = local.he_ipv6_networks }
+output "ipv6_port_forwards" {
+  value = { for key, f in local.he_ipv6_forwards : key => {
+    public_address = local.he_ipv6_public_address, protocol = "tcp", port = f.port,
+    guest          = f.guest, target_address = f.address, vnet_id = f.vnet_id
+  } }
+}
+output "ipv6_egress" {
+  value = { for name, e in local.he_ipv6_egress : name => {
+    public_address = local.he_ipv6_public_address, source_address = e.address, vnet_id = e.vnet_id, ports = e.ports
+  } }
+}
+output "ipv6_host_requirements" {
+  value = [for r in local.he_host_allow_rules : {
+    purpose  = r.comment, direction = r.type, iface = r.iface, source = r.source, destination = r.dest,
+    protocol = r.proto, icmp_type = r.proto == "icmpv6" ? r.dport : null
+  }]
+}
