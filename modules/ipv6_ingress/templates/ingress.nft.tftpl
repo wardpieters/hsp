@@ -1,0 +1,43 @@
+table ip6 hsp_he_ingress {
+  comment "hsp:ipv6-edge:v1"
+  chain prerouting {
+    type nat hook prerouting priority -101; policy accept;
+%{ for f in forwards ~}
+    iifname "hsp-he6" ip6 daddr ${public} tcp dport ${f.port} dnat to ${f.address}
+%{ endfor ~}
+  }
+  chain postrouting {
+    type nat hook postrouting priority 99; policy accept;
+%{ for e in egress ~}
+    oifname "hsp-he6" ct direction original ip6 saddr ${e.address} meta l4proto ${e.number} %{ if e.port != null }${e.protocol} dport ${e.port} %{ endif }snat to ${public}
+%{ endfor ~}
+  }
+  chain forward {
+    type filter hook forward priority -10; policy accept;
+    # Legacy fwbr bridge legs still receive native Proxmox guest filtering.
+    # The routed hop is checked on the VNet/tunnel interfaces below.
+    iifname "fwbr*" return
+    iifname "hsp-he6" jump edge
+    oifname "hsp-he6" jump edge
+    ip6 saddr ${ula} jump edge
+    ip6 daddr ${ula} jump edge
+  }
+  chain edge {
+    ct state invalid drop
+    # NDP is local control traffic, never routed from the HE tunnel.
+    iifname != "hsp-he6" meta l4proto ipv6-icmp icmpv6 type { 135, 136 } ip6 saddr { ${ula}, fe80::/10, ::/128 } ip6 daddr { ${ula}, fe80::/10, ff02::1:ff00:0/104, ff02::1/128 } accept
+    meta l4proto ipv6-icmp icmpv6 type { 130, 131, 132, 133, 134, 135, 136, 137, 143 } drop
+%{ for c in protected ~}
+    iifname "hsp-he6" ip6 saddr ${c} drop
+    oifname "hsp-he6" ip6 daddr ${c} drop
+%{ endfor ~}
+%{ for f in forwards ~}
+    ct status dnat ct original ip6 daddr ${public} ct original protocol 6 ct original proto-dst ${f.port} ct reply ip6 saddr ${f.address} ct state { new, established, related } accept
+%{ endfor ~}
+%{ for e in egress ~}
+    iifname "${e.vnet_id}" oifname "hsp-he6" ct direction original ip6 saddr ${e.address} meta l4proto ${e.number} %{ if e.port != null }${e.protocol} dport ${e.port} %{ endif }ct state { new, established, related } accept
+    ct status snat ct direction reply ct original ip6 saddr ${e.address} ct reply ip6 daddr ${public} ct original protocol ${e.number} %{ if e.port != null }ct original proto-dst ${e.port} %{ endif }ct state { established, related } accept
+%{ endfor ~}
+    drop
+  }
+}

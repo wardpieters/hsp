@@ -6,11 +6,12 @@ import { promisify } from 'node:util';
 const exec = promisify(execFile);
 
 // Render via the actual provider resource, never by copying the template logic.
-export async function renderedFiles(directory, filter) {
+export async function renderedFiles(directory, filter, runName) {
   const { stdout } = await exec('terraform', [`-chdir=${resolve(directory)}`, 'test', `-filter=${filter}`, '-json', '-verbose'], { maxBuffer: 25 * 1024 * 1024 });
   for (const line of stdout.split('\n')) {
     if (!line.startsWith('{')) continue;
     const event = JSON.parse(line);
+    if (runName && event['@testrun'] !== runName) continue;
     const resources = event.test_state?.root_module?.resources ?? event.test_plan?.resource_changes?.map(r => ({ ...r, values: r.change.after }));
     if (resources?.some(r => r.type === 'system_file' && r.values.content?.includes('# hsp-network-helper'))) {
       return Object.fromEntries(resources.filter(r => r.type === 'system_file').map(r => [r.name, r.values.content]));
@@ -19,10 +20,12 @@ export async function renderedFiles(directory, filter) {
   throw Error('No rendered network helper in Terraform test plan/state');
 }
 
-export async function networkFixture(t, script) {
+export async function networkFixture(t, script, files = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'hsp-network-'));
   t.after(() => rm(dir, { recursive: true, force: true }));
   await mkdir(join(dir, 'bin')); await mkdir(join(dir, 'runtime'));
+  await mkdir(join(dir, 'config'));
+  for (const [name, content] of Object.entries(files)) await writeFile(join(dir, 'config', name), content);
   const state = join(dir, 'state.json');
   await writeFile(state, JSON.stringify({ links: {}, routes: [], tables: {}, log: [], flows: [] }));
   const fake = `#!${process.execPath}
@@ -33,8 +36,14 @@ const done=(out='',code=0)=>{fs.writeFileSync(file,JSON.stringify(s));if(out)pro
 s.log.push(tool+' '+cmd);
 if(s.fail && s.fail.tool===tool && cmd.includes(s.fail.match)){delete s.fail;done('injected command failure',2);}
 if(tool==='sysctl')done();
-if(tool==='conntrack') { if(a.includes('-D')) s.flows=[]; done(); }
+if(tool==='ip6tables-save') done(s.raw??'');
+if(tool==='conntrack') {
+ const filters={'--orig-src':'origSrc','--orig-dst':'origDst','--reply-dst':'replyDst','--dport':'port','-p':'proto','--zone':'zone'};
+ if(a.includes('-D'))s.flows=s.flows.filter(flow=>!Object.entries(filters).every(([flag,key])=>!a.includes(flag)||String(flow[key])===a[a.indexOf(flag)+1]));
+ done();
+}
 if(tool==='nft') {
+ if(cmd==='list tables')done(Object.keys(s.tables).map(n=>'table ip6 '+n).join('\\n'));
  if(a[0]==='list'&&a[1]==='table')done(s.tables[a[3]]??'',s.tables[a[3]]?0:1);
  if(a.includes('-f')) {const f=a[a.indexOf('-f')+1], content=fs.readFileSync(f,'utf8'); if(!a.includes('-c')) {for(const m of content.matchAll(/delete table ip6 (\\w+)/g))delete s.tables[m[1]];for(const m of content.matchAll(/(?:^|\\n)table ip6 (\\w+) \\{/g))s.tables[m[1]]=content;}done();}
  if(a[0]==='delete'&&a[1]==='table'){delete s.tables[a[3]];done();}
@@ -57,12 +66,13 @@ if(tool==='ip') {
 }
 done('unexpected tool',99);
 `;
-  for (const tool of ['ip', 'nft', 'sysctl', 'conntrack']) await writeFile(join(dir, 'bin', tool), fake, { mode: 0o755 });
+  for (const tool of ['ip', 'nft', 'sysctl', 'conntrack', 'ip6tables-save']) await writeFile(join(dir, 'bin', tool), fake, { mode: 0o755 });
   const scriptPath = join(dir, 'helper.sh'); await writeFile(scriptPath, script);
   return {
     dir, scriptPath,
     read: async () => JSON.parse(await readFile(state, 'utf8')),
     seed: async changes => { const s = JSON.parse(await readFile(state)); await writeFile(state, JSON.stringify({ ...s, ...changes })); },
-    run: action => exec('/bin/sh', [scriptPath, action], { env: { ...process.env, PATH: `${join(dir, 'bin')}:/usr/bin:/bin:/usr/sbin:/sbin`, RUNTIME_DIRECTORY: join(dir, 'runtime'), HSP_FAKE_STATE: state } }),
+    configure: async files => { for (const [name, content] of Object.entries(files)) await writeFile(join(dir, 'config', name), content); },
+    run: action => exec('/bin/sh', [scriptPath, action], { env: { ...process.env, PATH: `${join(dir, 'bin')}:/usr/bin:/bin:/usr/sbin:/sbin`, RUNTIME_DIRECTORY: join(dir, 'runtime'), CONFIGURATION_DIRECTORY: join(dir, 'config'), HSP_FAKE_STATE: state } }),
   };
 }

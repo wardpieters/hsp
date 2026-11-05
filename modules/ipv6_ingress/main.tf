@@ -1,0 +1,79 @@
+locals {
+  protected = distinct(concat(var.protected_cidrs, [var.ula_prefix, "${cidrhost("${var.public_address}/64", 0)}/64", "::/128", "::1/128", "::ffff:0:0/96", "100::/64", "fc00::/7", "fe80::/10", "ff00::/8"]))
+  egress_rules = flatten([for name, e in var.egress : [for p in e.ports : {
+    address = e.address, vnet_id = e.vnet_id, protocol = p.protocol,
+    number  = p.protocol == "icmp" ? 58 : (p.protocol == "tcp" ? 6 : 17),
+    port    = p.port
+  }]])
+  permissions = join("\n", concat(["H|${var.public_address}|${var.ula_prefix}"], sort(distinct(concat(
+    [for f in values(var.forwards) : "D|${var.public_address}|${f.address}|tcp|${f.port}|${f.vnet_id}"],
+    [for e in local.egress_rules : "E|${var.public_address}|${e.address}|${e.protocol}|${e.port == null ? "none" : tostring(e.port)}|${e.vnet_id}"]
+  )))))
+}
+resource "system_folder" "config" {
+  path = "/etc/hsp-ipv6-ingress"
+  uid  = 0
+  gid  = 0
+  mode = "700"
+}
+resource "system_file" "ingress_rules" {
+  path = "${system_folder.config.path}/rules.nft"
+  content = templatefile("${path.module}/templates/ingress.nft.tftpl", {
+    public = var.public_address, ula = var.ula_prefix, forwards = var.forwards,
+    egress = local.egress_rules, protected = local.protected
+  })
+  uid  = 0
+  gid  = 0
+  mode = "600"
+}
+resource "system_file" "ingress_permissions" {
+  path    = "${system_folder.config.path}/permissions"
+  content = "${local.permissions}\n"
+  uid     = 0
+  gid     = 0
+  mode    = "600"
+}
+resource "system_file" "ingress_helper" {
+  path    = "${system_folder.config.path}/ingress.sh"
+  content = file("${path.module}/templates/ingress.sh.tftpl")
+  uid     = 0
+  gid     = 0
+  mode    = "700"
+}
+resource "system_file" "unit" {
+  path    = "/etc/systemd/system/hsp-ipv6-ingress.service"
+  content = <<-UNIT
+    [Unit]
+    Description=HSP IPv6 DNAT, internet SNAT and forwarding guard
+    Requires=hsp-he-ipv6.service pve-firewall.service
+    After=hsp-he-ipv6.service pve-firewall.service
+
+    [Service]
+    Type=oneshot
+    RemainAfterExit=yes
+    Environment=PATH=/usr/sbin:/usr/bin:/sbin:/bin
+    ConfigurationDirectory=hsp-ipv6-ingress
+    ConfigurationDirectoryMode=0700
+    RuntimeDirectory=hsp-ipv6-ingress
+    RuntimeDirectoryMode=0700
+    RuntimeDirectoryPreserve=yes
+    ExecStart=${system_file.ingress_helper.path} start
+    ExecReload=${system_file.ingress_helper.path} reload
+    ExecStop=${system_file.ingress_helper.path} stop
+
+    [Install]
+    WantedBy=multi-user.target
+  UNIT
+  uid     = 0
+  gid     = 0
+  mode    = "644"
+}
+resource "terraform_data" "revision" {
+  lifecycle { replace_triggered_by = [system_file.ingress_helper, system_file.ingress_rules, system_file.ingress_permissions, system_file.unit] }
+}
+resource "system_service_systemd" "ingress" {
+  name      = "hsp-ipv6-ingress"
+  enabled   = true
+  status    = "started"
+  reload_on = [terraform_data.revision.id]
+}

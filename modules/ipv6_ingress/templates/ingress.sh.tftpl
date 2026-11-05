@@ -1,0 +1,102 @@
+#!/bin/sh
+# hsp-network-helper: scoped IPv6 NAT and connection revocation.
+set -eu
+umask 077
+export LC_ALL=C
+runtime=${RUNTIME_DIRECTORY:-/run/hsp-ipv6-ingress}
+config=${CONFIGURATION_DIRECTORY:-/etc/hsp-ipv6-ingress}
+table=hsp_he_ingress
+owner=hsp:ipv6-edge:v1
+die() { echo "$*" >&2; exit 1; }
+case "${1:-}" in start|reload|stop) ;; *) die "Expected start|reload|stop" ;; esac
+for tool in ip nft conntrack ip6tables-save; do command -v "$tool" >/dev/null || die "Missing prerequisite: $tool"; done
+if current=$(nft list table ip6 "$table" 2>/dev/null); then
+  [ -f "$runtime/owner" ] && echo "$current" | grep -F "$owner" >/dev/null || die "Foreign IPv6 NAT table collision"
+fi
+mkdir -p "$runtime"
+chmod 700 "$runtime"
+transaction() {
+  body=$1
+  { if nft list table ip6 "$table" >/dev/null 2>&1; then echo "delete table ip6 $table"; fi; cat "$body"; } > "$runtime/transaction.nft"
+  nft -c -f "$runtime/transaction.nft"
+  nft -f "$runtime/transaction.nft"
+}
+block() {
+  header=$(sed -n '1p' "$runtime/owned")
+  old_ula=$(printf '%s\n' "$header" | cut -d '|' -f 3)
+  cat > "$runtime/block.nft" <<NFT
+table ip6 $table {
+ comment "$owner"
+ chain forward {
+  type filter hook forward priority -10; policy accept;
+  iifname "hsp-he6" drop
+  oifname "hsp-he6" drop
+  ip6 saddr $old_ula drop
+  ip6 daddr $old_ula drop
+ }
+}
+NFT
+  transaction "$runtime/block.nft"
+}
+purge() {
+  kind=$1 public=$2 address=$3 proto=$4 port=$5
+  set -- -D -f ipv6 --zone 0
+  if [ "$kind" = D ]; then
+    set -- "$@" --orig-dst "$public" -p tcp --dport "$port"
+  else
+    [ "$proto" != icmp ] || proto=58
+    set -- "$@" --orig-src "$address" --reply-dst "$public" -p "$proto"
+    [ "$port" = none ] || set -- "$@" --dport "$port"
+  fi
+  if ! conntrack "$@" > "$runtime/conntrack.log" 2>&1; then
+    if grep -F '0 flow entries have been deleted' "$runtime/conntrack.log" >/dev/null && ! grep -Ei 'error|failed|not permitted' "$runtime/conntrack.log" >/dev/null; then return 0; fi
+    block
+    cat "$runtime/conntrack.log" >&2
+    die "IPv6 conntrack cleanup failed; blocking guard retained"
+  fi
+}
+if [ "$1" = stop ]; then
+  if [ -f "$runtime/owned" ]; then
+    block
+    while IFS='|' read -r kind public address proto port vnet; do
+      case "$kind" in D|E) purge "$kind" "$public" "$address" "$proto" "$port" ;; esac
+    done < "$runtime/owned"
+  fi
+  if nft list table ip6 "$table" >/dev/null 2>&1; then nft delete table ip6 "$table"; fi
+  rm -f "$runtime/owner" "$runtime/owned" "$runtime/state" "$runtime/block.nft" "$runtime/transaction.nft" "$runtime/conntrack.log"
+  exit 0
+fi
+# Only the IPv6 zone-0 profile is supported. Never alter unrelated zone/NAT rules.
+raw=$(ip6tables-save)
+if printf '%s\n' "$raw" | grep -E -- '-j CT.*--zone' >/dev/null; then die "Conflicting IPv6 conntrack zone rule; expected zone 0"; fi
+tables=$(nft list tables)
+printf '%s\n' "$tables" | while read -r word family name; do
+  case "$family" in ip6|inet)
+    [ "$name" != "$table" ] || continue
+    other=$(nft list table "$family" "$name")
+    if printf '%s\n' "$other" | grep -E 'ct zone set|dnat( ip6| ip)? to|snat( ip6| ip)? to|masquerade' >/dev/null; then die "Conflicting IPv6/inet NAT or zone table: $name"; fi
+  ;; esac
+done
+ip link show dev hsp-he6 >/dev/null || die "Apply host-config before IPv6 ingress"
+while IFS='|' read -r kind public address proto port vnet; do
+  case "$kind" in D|E) ip link show dev "$vnet" >/dev/null || die "Missing guest VNet $vnet; apply SDN first" ;; esac
+done < "$config/permissions"
+if [ -f "$runtime/owned" ]; then
+  [ "$(sed -n '1p' "$runtime/owned")" = "$(sed -n '1p' "$config/permissions")" ] || die "Disable both roots before IPv6 topology changes"
+fi
+# Record the union BEFORE activating new rules, so failure recovery owns new flows too.
+{
+  sed -n '1p' "$config/permissions"
+  { if [ -f "$runtime/owned" ]; then sed '1d' "$runtime/owned"; fi; sed '1d' "$config/permissions"; } | sort -u
+} > "$runtime/pending"
+mv "$runtime/pending" "$runtime/owned"
+printf '%s\n' "$owner" > "$runtime/owner"
+transaction "$config/rules.nft"
+while IFS='|' read -r kind public address proto port vnet; do
+  case "$kind" in D|E)
+    line="$kind|$public|$address|$proto|$port|$vnet"
+    if ! grep -Fx -- "$line" "$config/permissions" >/dev/null; then purge "$kind" "$public" "$address" "$proto" "$port"; fi
+  ;; esac
+done < "$runtime/owned"
+cp "$config/permissions" "$runtime/state"
+cp "$config/permissions" "$runtime/owned"
