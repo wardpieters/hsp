@@ -70,24 +70,8 @@ run "hairpin_lxc" {
     lxc_template         = { file_id = "local:vztmpl/debian.tar.zst" }
   }
   assert {
-    condition     = length([for r in output.rules : r if r.comment == "hsp:ipv6:hairpin-out:443" && r.type == "out" && r.action == "ACCEPT" && r.source == "fd42:77:1:2::2/128" && r.dest == "2001:470:1f15:4d6::2/128" && r.proto == "tcp" && r.dport == "443"]) == 1
-    error_message = "Hairpin grants must be exact, deduplicated, ordered and preserve source enforcement."
-  }
-  assert {
-    condition     = length([for r in output.rules : r if r.comment == "hsp:ipv6:hairpin-in:443" && r.type == "in" && r.action == "ACCEPT" && r.source == "fd42:77:1:2::1/128" && r.dest == "fd42:77:1:2::2/128" && r.proto == "tcp" && r.dport == "443"]) == 1
-    error_message = "Hairpin grants must be exact, deduplicated, ordered and preserve source enforcement."
-  }
-  assert {
-    condition     = index([for r in output.rules : r.comment], "hsp:ipv6:hairpin-out:443") < index([for r in output.rules : r.comment], "hsp:ipv6:protect-out:2001:470:1f15:4d6::/64")
-    error_message = "Hairpin grants must be exact, deduplicated, ordered and preserve source enforcement."
-  }
-  assert {
-    condition     = index([for r in output.rules : r.comment], "hsp:ipv6:deny-control:out:137") < index([for r in output.rules : r.comment], "hsp:ipv6:hairpin-out:443") && index([for r in output.rules : r.comment], "hsp:ipv6:hairpin-in:443") < index([for r in output.rules : r.comment], "hsp:ipv6:protect-in:fc00::/7")
-    error_message = "Hairpin grants must be exact, deduplicated, ordered and preserve source enforcement."
-  }
-  assert {
-    condition     = length([for r in output.rules : r if r.action == "ACCEPT" && r.proto == "tcp" && r.type == "out" && r.dest == "::/0"]) == 0
-    error_message = "Hairpin grants must be exact, deduplicated, ordered and preserve source enforcement."
+    condition     = output.rules == run.hairpin_vm.rules
+    error_message = "LXC must produce the same exact ordered hairpin policy as VM."
   }
   assert {
     condition     = toset([for c in proxmox_virtual_environment_firewall_ipset.this.cidr : c.name]) == toset(["10.77.0.2", "fd42:77:1:2::2", "::"])
