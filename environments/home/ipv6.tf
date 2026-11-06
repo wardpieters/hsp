@@ -111,6 +111,7 @@ module "ipv6_ingress" {
   count           = var.he_ipv6.enabled && (length(local.he_ipv6_forwards) > 0 || length(local.he_ipv6_egress) > 0) ? 1 : 0
   source          = "../../modules/ipv6_ingress"
   providers       = { system = system.ingress }
+  proxmox_ssh     = var.proxmox_ssh
   public_address  = local.he_ipv6_public_address
   ula_prefix      = var.he_ipv6.ula_prefix
   protected_cidrs = local.he_ipv6_protected

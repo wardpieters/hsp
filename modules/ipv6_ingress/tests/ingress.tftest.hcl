@@ -1,5 +1,10 @@
+# Never execute SSH actions during offline mock applies or cleanup.
+override_module {
+  target = module.teardown
+}
 mock_provider "system" {}
 variables {
+  proxmox_ssh     = { host = "192.0.2.10", user = "root" }
   public_address  = "2001:470:1f15:4d6::2"
   ula_prefix      = "fd42:77:1::/48"
   protected_cidrs = ["2001:db8:abcd::/48"]

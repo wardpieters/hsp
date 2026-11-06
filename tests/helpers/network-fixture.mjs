@@ -14,7 +14,7 @@ export async function renderedFiles(directory, filter, runName) {
     if (runName && event['@testrun'] !== runName) continue;
     const resources = event.test_state?.root_module?.resources ?? event.test_plan?.resource_changes?.map(r => ({ ...r, values: r.change.after }));
     if (resources?.some(r => r.type === 'system_file' && r.values.content?.includes('# hsp-network-helper'))) {
-      return Object.fromEntries(resources.filter(r => r.type === 'system_file').map(r => [r.name, r.values.content]));
+      return { ...Object.fromEntries(resources.filter(r => r.type === 'system_file').map(r => [r.name, r.values.content])), teardown: resources.find(r => r.type === 'terraform_data' && /^(he_)?teardown$/.test(r.name))?.values.input };
     }
   }
   throw Error('No rendered network helper in Terraform test plan/state');
@@ -31,10 +31,18 @@ export async function networkFixture(t, script, files = {}) {
   const fake = `#!${process.execPath}
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 const file=process.env.HSP_FAKE_STATE, s=JSON.parse(fs.readFileSync(file)), tool=path.basename(process.argv[1]), a=process.argv.slice(2), cmd=a.join(' ');
 const done=(out='',code=0)=>{fs.writeFileSync(file,JSON.stringify(s));if(out)process.stdout.write(out+'\\n');process.exit(code);};
 s.log.push(tool+' '+cmd);
 if(s.fail && s.fail.tool===tool && cmd.includes(s.fail.match)){delete s.fail;done('injected command failure',2);}
+if(tool==='systemctl') {
+ if(a[0]!=='stop')done('unexpected systemctl command',99);
+ if(s.serviceActive===false)done();
+ s.serviceActive=false;fs.writeFileSync(file,JSON.stringify(s));
+ const result=spawnSync('/bin/sh',[process.env.HSP_FAKE_HELPER,'stop'],{env:process.env,encoding:'utf8'});
+ process.stdout.write(result.stdout??'');process.stderr.write(result.stderr??'');process.exit(result.status??1);
+}
 if(tool==='sysctl')done();
 if(tool==='ip6tables-save') done(s.raw??'');
 if(tool==='conntrack') {
@@ -66,13 +74,14 @@ if(tool==='ip') {
 }
 done('unexpected tool',99);
 `;
-  for (const tool of ['ip', 'nft', 'sysctl', 'conntrack', 'ip6tables-save']) await writeFile(join(dir, 'bin', tool), fake, { mode: 0o755 });
-  const scriptPath = join(dir, 'helper.sh'); await writeFile(scriptPath, script);
+  for (const tool of ['ip', 'nft', 'sysctl', 'conntrack', 'ip6tables-save', 'systemctl']) await writeFile(join(dir, 'bin', tool), fake, { mode: 0o755 });
+  const scriptPath = join(dir, 'helper.sh'); await writeFile(scriptPath, script, { mode: 0o700 });
   return {
     dir, scriptPath,
     read: async () => JSON.parse(await readFile(state, 'utf8')),
     seed: async changes => { const s = JSON.parse(await readFile(state)); await writeFile(state, JSON.stringify({ ...s, ...changes })); },
     configure: async files => { for (const [name, content] of Object.entries(files)) await writeFile(join(dir, 'config', name), content); },
+    teardown: command => exec('/bin/sh', ['-c', command.replaceAll('/usr/bin/systemctl', 'systemctl').replace(/\/(?:etc\/hsp-ipv6-ingress\/ingress|usr\/local\/lib\/hsp-he-ipv6\/routing)\.sh/g, scriptPath)], { env: { ...process.env, PATH: `${join(dir, 'bin')}:/usr/bin:/bin:/usr/sbin:/sbin`, RUNTIME_DIRECTORY: join(dir, 'runtime'), CONFIGURATION_DIRECTORY: join(dir, 'config'), HSP_FAKE_STATE: state, HSP_FAKE_HELPER: scriptPath } }),
     run: action => exec('/bin/sh', [scriptPath, action], { env: { ...process.env, PATH: `${join(dir, 'bin')}:/usr/bin:/bin:/usr/sbin:/sbin`, RUNTIME_DIRECTORY: join(dir, 'runtime'), CONFIGURATION_DIRECTORY: join(dir, 'config'), HSP_FAKE_STATE: state } }),
   };
 }

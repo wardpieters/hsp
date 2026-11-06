@@ -78,11 +78,12 @@ resource "terraform_data" "he_revision" {
   lifecycle { replace_triggered_by = [system_file.he_helper, system_file.he_unit, system_file.he_sysctl] }
 }
 resource "system_service_systemd" "he_ipv6" {
-  count     = var.he_ipv6 == null ? 0 : 1
-  name      = "hsp-he-ipv6"
-  enabled   = true
-  status    = "started"
-  reload_on = [terraform_data.he_revision[0].id]
+  count      = var.he_ipv6 == null ? 0 : 1
+  name       = "hsp-he-ipv6"
+  enabled    = true
+  status     = "started"
+  reload_on  = [terraform_data.he_revision[0].id]
+  depends_on = [module.he_teardown]
 }
 output "he_ipv6_status" {
   value = var.he_ipv6 == null ? null : {
@@ -94,4 +95,32 @@ output "he_ipv6_status" {
 }
 output "he_ipv6_generation" {
   value = var.he_ipv6 == null ? null : terraform_data.he_revision[0].id
+}
+
+# Create the gate before starting the service, so failed starts are covered.
+# Destroy it after service removal but before deleting its files: inactive
+# units skip ExecStop, so explicitly rerun the idempotent helper on every retry.
+variable "proxmox_ssh" {
+  type    = object({ host = string, user = string, port = optional(number, 22), host_key = optional(string) })
+  default = null
+}
+resource "terraform_data" "he_teardown" {
+  count = var.he_ipv6 == null ? 0 : 1
+  input = {
+    ssh     = var.proxmox_ssh
+    command = "/usr/bin/systemctl stop hsp-he-ipv6 && ${system_file.he_helper[0].path} stop"
+  }
+  lifecycle {
+    precondition {
+      condition     = var.proxmox_ssh != null
+      error_message = "HE IPv6 needs SSH agent connection settings for retryable teardown; retain them until removal completes."
+    }
+  }
+  depends_on = [system_file.he_unit, system_file.he_sysctl]
+}
+
+module "he_teardown" {
+  count    = var.he_ipv6 == null ? 0 : 1
+  source   = "../ssh_cleanup"
+  settings = terraform_data.he_teardown[0].output
 }

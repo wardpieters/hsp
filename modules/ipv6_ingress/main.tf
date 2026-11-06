@@ -72,8 +72,35 @@ resource "terraform_data" "revision" {
   lifecycle { replace_triggered_by = [system_file.ingress_helper, system_file.ingress_rules, system_file.ingress_permissions, system_file.unit] }
 }
 resource "system_service_systemd" "ingress" {
-  name      = "hsp-ipv6-ingress"
-  enabled   = true
-  status    = "started"
-  reload_on = [terraform_data.revision.id]
+  name       = "hsp-ipv6-ingress"
+  enabled    = true
+  status     = "started"
+  reload_on  = [terraform_data.revision.id]
+  depends_on = [module.teardown]
+}
+
+# Create the gate before starting the service, so failed starts are covered.
+# Destroy it after service removal but before deleting its files: inactive
+# units skip ExecStop, so explicitly rerun the idempotent helper on every retry.
+variable "proxmox_ssh" {
+  type    = object({ host = string, user = string, port = optional(number, 22), host_key = optional(string) })
+  default = null
+}
+resource "terraform_data" "teardown" {
+  input = {
+    ssh     = var.proxmox_ssh
+    command = "/usr/bin/systemctl stop hsp-ipv6-ingress && ${system_file.ingress_helper.path} stop"
+  }
+  lifecycle {
+    precondition {
+      condition     = var.proxmox_ssh != null
+      error_message = "HE IPv6 needs SSH agent connection settings for retryable teardown; retain them until removal completes."
+    }
+  }
+  depends_on = [system_file.unit, system_file.ingress_rules, system_file.ingress_permissions]
+}
+
+module "teardown" {
+  source   = "../ssh_cleanup"
+  settings = terraform_data.teardown.output
 }

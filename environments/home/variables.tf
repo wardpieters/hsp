@@ -39,7 +39,7 @@ variable "pihole_password" {
 }
 variable "node_name" { type = string }
 variable "proxmox_ssh" {
-  description = "Optional Proxmox host SSH agent connection, required only for raw LXC mounts/cgroups; non-root users need passwordless sudo."
+  description = "Optional Proxmox host SSH agent connection, required for raw LXC mounts/cgroups and enabled HE IPv6; non-root users need passwordless sudo."
   type        = object({ host = string, user = string, port = optional(number, 22), host_key = optional(string) })
   default     = null
   validation {

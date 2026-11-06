@@ -9,7 +9,7 @@ table=hsp_he_ingress
 owner=hsp:ipv6-edge:v1
 die() { echo "$*" >&2; exit 1; }
 case "${1:-}" in start|reload|stop) ;; *) die "Expected start|reload|stop" ;; esac
-for tool in ip nft conntrack ip6tables-save; do command -v "$tool" >/dev/null || die "Missing prerequisite: $tool"; done
+command -v nft >/dev/null || die "Missing prerequisite: nft; restore nft before reconciling owned state"
 if current=$(nft list table ip6 "$table" 2>/dev/null); then
   [ -f "$runtime/owner" ] && echo "$current" | grep -F "$owner" >/dev/null || die "Foreign IPv6 NAT table collision"
 fi
@@ -55,6 +55,27 @@ purge() {
     die "IPv6 conntrack cleanup failed; blocking guard retained"
   fi
 }
+# Arm failure protection before preflight or replacement can fail. Reductions
+# must not leave the previous, broader grants usable by established flows.
+reduction=0
+if [ "$1" != stop ] && [ -f "$runtime/owner" ] && [ -f "$runtime/owned" ]; then
+  while IFS= read -r line; do
+    case "$line" in D\|*|E\|*)
+      if ! grep -Fx -- "$line" "$config/permissions" >/dev/null; then reduction=1; fi
+    ;; esac
+  done < "$runtime/owned"
+fi
+on_exit() {
+  result=$?
+  trap - 0
+  if [ "$result" -ne 0 ] && [ "$reduction" -eq 1 ]; then
+    block || echo "Could not install blocking guard; withdraw the HE transport before retrying" >&2
+  fi
+  exit "$result"
+}
+trap on_exit 0
+trap 'exit 1' HUP INT TERM
+for tool in ip conntrack ip6tables-save; do command -v "$tool" >/dev/null || die "Missing prerequisite: $tool"; done
 if [ "$1" = stop ]; then
   if [ -f "$runtime/owned" ]; then
     block

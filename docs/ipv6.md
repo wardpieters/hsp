@@ -216,8 +216,14 @@ guard. Retain SSH settings throughout. Finally remove the manual router
 forward. No global firewall/conntrack flush or IPv4 guest removal occurs.
 
 Helpers return an error and retain a blocking guard if connection cleanup
-fails. Repair the reported problem and reconcile before treating removal
-as complete. Forwarding sysctl runtime state is left enabled because other
+fails. A failed permission reduction also installs that guard if preflight
+or rule replacement fails; an unsuccessful addition keeps the previous
+restrictive policy. Repair the reported problem and reconcile before treating
+removal as complete. Two destroy-only SSH agent gates explicitly retry helper
+cleanup even when systemd has marked a failed stop inactive; Terraform keeps
+the helper/unit resources until the gate succeeds. They retain SSH connection
+metadata in state, with no new private keys or passwords. If nft itself cannot
+install the guard, withdraw the HE transport manually before retrying. Forwarding sysctl runtime state is left enabled because other
 networking may depend on it; only HSP's persistent sysctl file is removed.
 
 Use the full disable/reconfigure/enable cycle for routed/ULA prefix or

@@ -44,7 +44,7 @@ test('foreign table and conflicting conntrack zone preflight fail without overwr
   const f = await fixture(t); await f.seed({ tables: { hsp_he_ingress: 'foreign' } }); await assert.rejects(f.run('start')); assert.equal((await f.read()).tables.hsp_he_ingress, 'foreign');
   const g = await fixture(t); await g.seed({ raw: '-A PREROUTING -i fwbr+ -j CT --zone 1' }); await assert.rejects(g.run('start')); assert.deepEqual((await g.read()).tables, {});
 });
-test('adding permissions preserves retained flows; rejected transaction leaves the previous rules intact', async t => {
+test('adding permissions preserves retained flows; rejected reduction blocks old established permissions', async t => {
   const f = await fixture(t); await f.configure(files(revoked)); await f.run('start');
   await f.seed({ flows: flows().filter(f => f.id === 'outgoing-ntp') });
   await f.configure(files(enabled)); await f.run('reload');
@@ -52,6 +52,29 @@ test('adding permissions preserves retained flows; rejected transaction leaves t
   const oldRules = (await f.read()).tables.hsp_he_ingress;
   await f.configure(files(revoked)); await f.seed({ fail: { tool: 'nft', match: '-c' } });
   await assert.rejects(f.run('reload'));
-  assert.equal((await f.read()).tables.hsp_he_ingress, oldRules);
+  assert.notEqual((await f.read()).tables.hsp_he_ingress, oldRules);
+  assert.match((await f.read()).tables.hsp_he_ingress, /iifname "hsp-he6" drop/);
+  assert(!((await f.read()).tables.hsp_he_ingress.includes('snat to')));
   await f.run('reload'); assert.deepEqual((await f.read()).flows.map(f => f.id), ['outgoing-ntp']);
+});
+
+test('failed reduction preflight blocks access; failed additions preserve restrictive policy', async t => {
+  const f = await fixture(t); await f.run('start'); await f.seed({ flows: flows(), raw: '-A PREROUTING -j CT --zone 1' });
+  await f.configure(files(revoked)); await assert.rejects(f.run('reload'));
+  assert.match((await f.read()).tables.hsp_he_ingress, /iifname "hsp-he6" drop/);
+  const g = await fixture(t); await g.configure(files(revoked)); await g.run('start');
+  const old = (await g.read()).tables.hsp_he_ingress;
+  await g.configure(files(enabled)); await g.seed({ fail: { tool: 'nft', match: '-c' } }); await assert.rejects(g.run('reload'));
+  assert.equal((await g.read()).tables.hsp_he_ingress, old);
+});
+test('Terraform teardown retries helper after failed ExecStop leaves service inactive', async t => {
+  assert.match(enabled.teardown?.command ?? '', /systemctl stop .* && .*ingress.sh stop/);
+  const f = await fixture(t); await f.run('start');
+  await f.seed({ serviceActive: true, flows: flows(), fail: { tool: 'conntrack', match: '-D' } });
+  await assert.rejects(f.teardown(enabled.teardown.command));
+  assert.equal((await f.read()).serviceActive, false);
+  assert.match((await f.read()).tables.hsp_he_ingress, /iifname "hsp-he6" drop/);
+  await f.teardown(enabled.teardown.command);
+  assert.equal((await f.read()).tables.hsp_he_ingress, undefined);
+  assert.deepEqual((await f.read()).flows.map(f => f.id), ['unrelated']);
 });

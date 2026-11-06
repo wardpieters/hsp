@@ -1,5 +1,5 @@
 .PHONY: init check fmt docs-install docs-start docs-build docs-serve
-TF_DIRS := environments/home environments/host-config modules/platform_network modules/guest_network modules/vm modules/dns_records modules/service_vm modules/proxmox_host modules/ipv6_ingress
+TF_DIRS := environments/home environments/host-config modules/platform_network modules/guest_network modules/vm modules/dns_records modules/service_vm modules/proxmox_host modules/ipv6_ingress modules/ssh_cleanup
 TF_INIT_ARGS ?=
 init:
 	@set -e; for dir in $(TF_DIRS); do terraform -chdir=$$dir init -backend=false -input=false $(TF_INIT_ARGS); done

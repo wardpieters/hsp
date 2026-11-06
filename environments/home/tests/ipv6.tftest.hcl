@@ -1,3 +1,7 @@
+# Never execute SSH actions during offline mock applies or cleanup.
+override_module {
+  target = module.ipv6_ingress[0].module.teardown
+}
 mock_provider "system" { alias = "ingress" }
 mock_provider "restful" {
   override_during = plan
@@ -23,7 +27,7 @@ variables {
   vm_template_id        = 9000
   datastore_id          = "local-lvm"
   ssh_public_keys       = ["ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGbQ7fxCXpGk6DckT2PRXJ5w5pMR6qksY6hOyw4mftR1 test"]
-  proxmox_ssh           = { host = "192.168.100.10", user = "root" }
+  proxmox_ssh           = { host = "192.0.2.10", user = "root" }
   guests = {
     proxy-public = { vm_id = 1002, slot = 2, vnet_id = "hsp1002", role = "public_proxy", public_ports = [{ protocol = "tcp", port = 80 }, { protocol = "tcp", port = 443 }] }
     cloud        = { vm_id = 101, slot = 1, vnet_id = "hsp101" }

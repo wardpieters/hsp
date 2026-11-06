@@ -1,6 +1,6 @@
 # Optional Hurricane Electric IPv6 ingress and internet egress
 
-Status: approved by the user on 2026-11-05; implementation in progress.
+Status: implementation complete and verified offline on 2026-11-06; live acceptance and deployment remain operator-owned.
 The user selected Proxmox destination NAT instead of TCP proxying mail
 through the public reverse proxy. This revision supersedes that earlier
 architecture. The latest requirement also enables outgoing IPv6 according
@@ -214,8 +214,14 @@ forwarding requires SSH to the same Proxmox node. Fresh/default-off
 configurations must not initialize SSH sessions or require SSH settings.
 Disabling an already-deployed feature DOES require SSH for resource cleanup;
 retain the same SSH connection settings until teardown completes. No new
-provider versions, provisioners, networkd takeover, or overwriting Proxmox-generated
-network files. On Proxmox require iproute2, sysctl, POSIX shell, `nft` and
+provider versions, networkd takeover, or overwriting Proxmox-generated
+network files. Final review required one narrow exception to the original
+no-new-provisioners constraint: two destroy-only SSH agent remote-exec gates
+explicitly stop the service and rerun its idempotent helper before Terraform
+can delete cleanup files. Systemd skips ExecStop for a failed/inactive unit,
+so relying only on service deletion cannot make failed teardown retryable.
+The gates save connection metadata in state, add no private keys/passwords,
+and do not run during creation or ordinary reconciliation. On Proxmox require iproute2, sysctl, POSIX shell, `nft` and
 `conntrack` userspace tools; document these prerequisites rather than silently
 installing packages. No Python/jq dependency on Proxmox.
 

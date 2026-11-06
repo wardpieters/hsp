@@ -1,6 +1,10 @@
+# Never execute SSH actions during offline mock applies or cleanup.
+override_module {
+  target = module.proxmox.module.he_teardown
+}
 mock_provider "system" {}
 variables {
-  proxmox_ssh   = { host = "192.168.100.10", user = "root" }
+  proxmox_ssh   = { host = "192.0.2.10", user = "root" }
   platform_cidr = "10.77.0.0/24"
 }
 run "reject_ipv6_server_in_ipv4_field" {

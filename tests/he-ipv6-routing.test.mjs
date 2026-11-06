@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import test, { before } from 'node:test';
 import { renderedFiles, networkFixture } from './helpers/network-fixture.mjs';
-let script;
-before(async () => { script = (await renderedFiles('modules/proxmox_host', 'tests/ipv6.tftest.hcl')).he_helper; });
+let script, teardown;
+before(async () => { const f = await renderedFiles('modules/proxmox_host', 'tests/ipv6.tftest.hcl'); script = f.he_helper; teardown = f.teardown; });
 
 test('starts guarded tunnel and public /128 before any exposure; reload converges', async t => {
   const f = await networkFixture(t, script); await f.run('start');
@@ -44,4 +44,14 @@ test('changed tunnel endpoints reconcile without stale addresses; topology migra
 test('stop refuses a foreign replacement instead of deleting it', async t => {
   const f = await networkFixture(t, script); await f.run('start'); const s = await f.read(); s.links['hsp-he6'].alias = 'foreign'; await f.seed({ links: s.links });
   await assert.rejects(f.run('stop')); assert.equal((await f.read()).links['hsp-he6'].alias, 'foreign');
+});
+
+test('Terraform host teardown retries helper even after a failed stop deactivates service', async t => {
+  assert.match(teardown?.command ?? '', /systemctl stop .* && .*routing.sh stop/);
+  const f = await networkFixture(t, script); await f.run('start');
+  await f.seed({ serviceActive: true, fail: { tool: 'ip', match: 'link delete' } });
+  await assert.rejects(f.teardown(teardown.command));
+  assert.equal((await f.read()).serviceActive, false); assert((await f.read()).tables.hsp_he_host);
+  await f.teardown(teardown.command);
+  const s = await f.read(); assert.deepEqual(s.links, {}); assert.deepEqual(s.tables, {}); assert.deepEqual(s.routes, []);
 });
