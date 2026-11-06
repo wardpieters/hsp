@@ -23,6 +23,14 @@ variable "proxmox_ssh" {
   default = null
 }
 variable "network" { type = object({ address = string, gateway = string, cidr = string, vnet_id = string, ipv6 = optional(object({ cidr = string, gateway = string, address = string })) }) }
+variable "ipv6_hairpin_out" {
+  type    = list(object({ public_address = string, port = number }))
+  default = []
+}
+variable "ipv6_hairpin_in" {
+  type    = list(object({ gateway = string, port = number }))
+  default = []
+}
 variable "ipv6_forwarded_ports" {
   type    = list(number)
   default = []
@@ -69,6 +77,8 @@ module "vm" {
   vm_template_id         = var.guest.vm_template_id
   datastore_id           = var.guest.datastore_id
   network                = var.network
+  ipv6_hairpin_out       = var.ipv6_hairpin_out
+  ipv6_hairpin_in        = var.ipv6_hairpin_in
   ipv6_forwarded_ports   = var.ipv6_forwarded_ports
   protected_ipv6_cidrs   = var.protected_ipv6_cidrs
   started                = var.guest.started
