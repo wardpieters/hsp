@@ -4,8 +4,10 @@ variables {
   public_address = "2001:470:1f15:4d6::2"
   ula_prefix     = "fd42:77:1::/48"
   proxmox_ssh    = { host = "192.0.2.10", user = "root" }
+  egress         = { cloud = { address = "fd42:77:1:1::2", vnet_id = "hsp1001", ports = [{ protocol = "tcp", port = 443 }, { protocol = "udp", port = 123 }, { protocol = "icmp" }] } }
   forwards       = { https = { guest = "proxy", port = 443, address = "fd42:77:1:2::2", vnet_id = "hsp1002" } }
   hairpin = {
+    "other/https" = { source_guest = "other", source_address = "fd42:77:1:3::2", source_vnet_id = "hsp1003", forward_key = "https", target_guest = "proxy", target_address = "fd42:77:1:2::2", target_vnet_id = "hsp1002", target_gateway = "fd42:77:1:2::1", port = 443 }
     "cloud/https" = { source_guest = "cloud", source_address = "fd42:77:1:1::2", source_vnet_id = "hsp1001", forward_key = "https", target_guest = "proxy", target_address = "fd42:77:1:2::2", target_vnet_id = "hsp1002", target_gateway = "fd42:77:1:2::1", port = 443 }
     "proxy/https" = { source_guest = "proxy", source_address = "fd42:77:1:2::2", source_vnet_id = "hsp1002", forward_key = "https", target_guest = "proxy", target_address = "fd42:77:1:2::2", target_vnet_id = "hsp1002", target_gateway = "fd42:77:1:2::1", port = 443 }
   }
@@ -84,7 +86,31 @@ run "hairpin_errors_precede_protected_denials" {
   command = plan
 
   assert {
-    condition     = strcontains(split("iifname \"hsp-he6\" ip6 saddr", system_file.ingress_rules.content)[0], "ct original ip6 saddr fd42:77:1:1::2 ct original ip6 daddr 2001:470:1f15:4d6::2")
+    condition     = strcontains(split("iifname \"hsp-he6\" ip6 saddr", system_file.ingress_rules.content)[0], "iifname \"hsp1001\" oifname \"hsp1002\" ct state related meta l4proto ipv6-icmp icmpv6 type { 1, 2, 3, 4 } ct status dnat ct original ip6 saddr fd42:77:1:1::2 ct original ip6 daddr 2001:470:1f15:4d6::2 ct original protocol 6 ct original proto-dst 443 ct reply ip6 saddr fd42:77:1:2::2 accept")
     error_message = "hairpin_errors_precede_protected_denials contract failed."
+  }
+}
+
+run "enabled" { command = apply }
+run "grant_revoked" {
+  command = apply
+  variables { hairpin = { "other/https" = { source_guest = "other", source_address = "fd42:77:1:3::2", source_vnet_id = "hsp1003", forward_key = "https", target_guest = "proxy", target_address = "fd42:77:1:2::2", target_vnet_id = "hsp1002", target_gateway = "fd42:77:1:2::1", port = 443 }, "proxy/https" = { source_guest = "proxy", source_address = "fd42:77:1:2::2", source_vnet_id = "hsp1002", forward_key = "https", target_guest = "proxy", target_address = "fd42:77:1:2::2", target_vnet_id = "hsp1002", target_gateway = "fd42:77:1:2::1", port = 443 } } }
+}
+run "egress_revoked" {
+  command = apply
+  variables { egress = { cloud = { address = "fd42:77:1:1::2", vnet_id = "hsp1001", ports = [{ protocol = "udp", port = 123 }, { protocol = "icmp" }] } } }
+}
+run "self_only" {
+  command = apply
+  variables {
+    egress  = {}
+    hairpin = { "proxy/https" = { source_guest = "proxy", source_address = "fd42:77:1:2::2", source_vnet_id = "hsp1002", forward_key = "https", target_guest = "proxy", target_address = "fd42:77:1:2::2", target_vnet_id = "hsp1002", target_gateway = "fd42:77:1:2::1", port = 443 } }
+  }
+}
+run "remapped" {
+  command = apply
+  variables {
+    forwards = { https = { guest = "proxy", port = 443, address = "fd42:77:1:3::2", vnet_id = "hsp1003" } }
+    hairpin  = { "cloud/https" = { source_guest = "cloud", source_address = "fd42:77:1:1::2", source_vnet_id = "hsp1001", forward_key = "https", target_guest = "proxy", target_address = "fd42:77:1:3::2", target_vnet_id = "hsp1003", target_gateway = "fd42:77:1:3::1", port = 443 } }
   }
 }

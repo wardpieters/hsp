@@ -46,6 +46,77 @@ delete_connections() {
     die "IPv6 conntrack cleanup failed; blocking guard retained"
   fi
 }
+# A journal is committed before any tuple is deleted. It survives failed stop
+# and reload attempts, including failures after routed evidence is gone.
+replay_connections() {
+  [ -f "$runtime/hairpin-pending" ] || return 0
+  while IFS='|' read -r mode source destination sport dport reply_source reply_destination translated; do
+    delete_connections -D -f ipv6 --zone 0 --orig-src "$source" --orig-dst "$destination" -p tcp --sport "$sport" --dport "$dport" --reply-src "$reply_source" --reply-dst "$reply_destination"
+    delete_connections -D -f ipv6 --zone 1 --orig-src "$source" --orig-dst "$destination" -p tcp --sport "$sport" --dport "$dport"
+    if [ "$mode" = P ]; then
+      delete_connections -D -f ipv6 --zone 1 --orig-src "$reply_destination" --orig-dst "$reply_source" -p tcp --sport "$translated" --dport "$dport"
+    fi
+  done < "$runtime/hairpin-pending"
+  rm -f "$runtime/hairpin-pending"
+}
+snapshot_connections() {
+  mode=$1 public=$2 address=$3 port=$4 target=$5 gateway=$6
+  set -- -L -f ipv6 --zone 0 --orig-src "$address" --orig-dst "$public" --reply-src "$target" --reply-dst "$gateway" -p tcp --dport "$port" -o extended
+  if [ "$mode" = E ]; then
+    # E's destination is arbitrary; only the public reply destination owns it.
+    set -- -L -f ipv6 --zone 0 --orig-src "$address" --reply-dst "$public" -p tcp --dport "$port" -o extended
+  fi
+  conntrack "$@" > "$runtime/enumeration" || die "IPv6 conntrack enumeration failed; blocking guard retained"
+  if [ "$mode" = E ]; then
+    conntrack -L -f ipv6 --zone 0 --orig-src "$address" --reply-dst "$address" -p tcp --dport "$port" -o extended >> "$runtime/enumeration" || die "IPv6 conntrack enumeration failed; blocking guard retained"
+  fi
+  # conntrack emits the original tuple followed by its reply tuple. Reject
+  # missing, duplicated, non-address or non-port fields rather than guessing.
+  awk -v mode="$mode" -v source="$address" -v public="$public" -v port="$port" -v target="$target" -v gateway="$gateway" '
+    function address(x) { return x ~ /^[0-9a-fA-F:]+$/ && x ~ /:/ }
+    function number(x) { return x ~ /^[0-9]+$/ && x > 0 && x <= 65535 }
+    {
+      ns=nd=nsp=ndp=0
+      for(i=1;i<=NF;i++) {
+        split($i, part, "=")
+        if(part[1]=="src") src[++ns]=part[2]
+        if(part[1]=="dst") dst[++nd]=part[2]
+        if(part[1]=="sport") sp[++nsp]=part[2]
+        if(part[1]=="dport") dp[++ndp]=part[2]
+      }
+      if(!(($1=="tcp" && $2==6) || ($1=="ipv6" && $2==10 && $3=="tcp" && $4==6)) || ns!=2 || nd!=2 || nsp!=2 || ndp!=2 || !address(src[1]) || !address(src[2]) || !address(dst[1]) || !address(dst[2]) || !number(sp[1]) || !number(sp[2]) || !number(dp[1]) || !number(dp[2]) || src[1]!=source || dp[1]!=port || sp[2]!=port || (mode=="P" && (dst[1]!=public || src[2]!=target || dst[2]!=gateway)) || (mode=="E" && dst[2]!=public && dst[2]!=source)) { bad=1; exit 1 }
+      print mode "|" src[1] "|" dst[1] "|" sp[1] "|" dp[1] "|" src[2] "|" dst[2] "|" dp[2]
+    }
+    END { if(bad) exit 1 }
+  ' "$runtime/enumeration" >> "$runtime/hairpin-next" || die "Malformed IPv6 conntrack tuple; blocking guard retained"
+}
+bridge_changed() {
+  endpoint=$1
+  { [ ! -f "$runtime/bridge-zones" ] || cat "$runtime/bridge-zones"; cat "$config/bridge-zones"; } | sort -u > "$runtime/zone-candidates"
+  while IFS='|' read -r bridge candidate; do
+    [ "$candidate" = "$endpoint" ] || continue
+    row="$bridge|$candidate"
+    if [ ! -f "$runtime/bridge-zones" ] || ! grep -Fx -- "$row" "$runtime/bridge-zones" >/dev/null || ! grep -Fx -- "$row" "$config/bridge-zones" >/dev/null; then return 0; fi
+  done < "$runtime/zone-candidates"
+  return 1
+}
+prepare_hairpin_cleanup() {
+  action=$1
+  replay_connections
+  awk -F '|' '$1 == "P" && (NF != 9 || $4 != "tcp" || $9 == "") { exit 1 }' "$runtime/owned" || die "Malformed hairpin permission"
+  : > "$runtime/hairpin-next"
+  while IFS='|' read -r kind public address proto port vnet target target_vnet gateway extra; do
+    [ "$kind" = P ] || continue
+    [ -n "$gateway" ] && [ -z "$extra" ] && [ "$proto" = tcp ] || die "Malformed hairpin permission"
+    row="$kind|$public|$address|$proto|$port|$vnet|$target|$target_vnet|$gateway"
+    if [ "$action" = stop ] || ! grep -Fx -- "$row" "$config/permissions" >/dev/null || bridge_changed "$address" || bridge_changed "$target"; then
+      block
+      snapshot_connections P "$public" "$address" "$port" "$target" "$gateway"
+    fi
+  done < "$runtime/owned"
+  mv "$runtime/hairpin-next" "$runtime/hairpin-pending"
+  replay_connections
+}
 purge() {
   kind=$1 public=$2 address=$3 proto=$4 port=$5
   if [ "$kind" = D ]; then
@@ -56,11 +127,22 @@ purge() {
     [ "$proto" != icmp ] || proto=58
     set -- -p "$proto"
     [ "$port" = none ] || set -- "$@" --dport "$port"
+    if [ "$proto" = tcp ] && grep -F "P|$public|$address|tcp|$port|" "$runtime/owned" >/dev/null; then
+      : > "$runtime/hairpin-next"
+      snapshot_connections E "$public" "$address" "$port" none none
+      mv "$runtime/hairpin-next" "$runtime/hairpin-pending"
+      replay_connections
+    fi
     delete_connections -D -f ipv6 --zone 0 --orig-src "$address" --reply-dst "$public" "$@"
     # Revoke broken pre-upgrade null-NAT bindings too, without flushing other
     # guests/protocols/ports. Bridge tracking has no public source translation.
     delete_connections -D -f ipv6 --zone 0 --orig-src "$address" --reply-dst "$address" "$@"
-    delete_connections -D -f ipv6 --zone 1 --orig-src "$address" "$@"
+    if [ "$proto" = tcp ] && grep -F "P|$public|$address|tcp|$port|" "$runtime/owned" >/dev/null; then
+      # Exact public and legacy null-NAT tuples were already journaled above.
+      :
+    else
+      delete_connections -D -f ipv6 --zone 1 --orig-src "$address" "$@"
+    fi
   fi
 }
 # Arm failure protection before preflight or replacement can fail. Reductions
@@ -68,7 +150,7 @@ purge() {
 reduction=0
 if [ "$1" != stop ] && [ -f "$runtime/owner" ] && [ -f "$runtime/owned" ]; then
   while IFS= read -r line; do
-    case "$line" in D\|*|E\|*)
+    case "$line" in D\|*|E\|*|P\|*)
       if ! grep -Fx -- "$line" "$config/permissions" >/dev/null; then reduction=1; fi
     ;; esac
   done < "$runtime/owned"
@@ -87,12 +169,13 @@ for tool in ip conntrack ip6tables-save; do command -v "$tool" >/dev/null || die
 if [ "$1" = stop ]; then
   if [ -f "$runtime/owned" ]; then
     block
+    prepare_hairpin_cleanup stop
     while IFS='|' read -r kind public address proto port vnet; do
       case "$kind" in D|E) purge "$kind" "$public" "$address" "$proto" "$port" ;; esac
     done < "$runtime/owned"
   fi
   if nft list table ip6 "$table" >/dev/null 2>&1; then nft delete table ip6 "$table"; fi
-  rm -f "$runtime/owner" "$runtime/owned" "$runtime/state" "$runtime/bridge-zones" "$runtime/zone-candidates" "$runtime/block.nft" "$runtime/transaction.nft" "$runtime/conntrack.log"
+  rm -f "$runtime/owner" "$runtime/owned" "$runtime/state" "$runtime/bridge-zones" "$runtime/zone-candidates" "$runtime/block.nft" "$runtime/transaction.nft" "$runtime/conntrack.log" "$runtime/enumeration" "$runtime/hairpin-next"
   exit 0
 fi
 # Routed NAT is zone 0, with only owned legacy firewall bridges in zone 1.
@@ -108,8 +191,13 @@ printf '%s\n' "$tables" | while read -r word family name; do
   ;; esac
 done
 ip link show dev hsp-he6 >/dev/null || die "Apply host-config before IPv6 ingress"
-while IFS='|' read -r kind public address proto port vnet; do
-  case "$kind" in D|E) ip link show dev "$vnet" >/dev/null || die "Missing guest VNet $vnet; apply SDN first" ;; esac
+awk -F '|' '$1 == "P" && (NF != 9 || $4 != "tcp" || $9 == "") { exit 1 }' "$config/permissions" || die "Malformed hairpin permission"
+while IFS='|' read -r kind public address proto port vnet target target_vnet gateway extra; do
+  case "$kind" in P)
+    [ -n "$gateway" ] && [ -z "$extra" ] && [ "$proto" = tcp ] || die "Malformed hairpin permission"
+    ip link show dev "$vnet" >/dev/null || die "Missing guest VNet $vnet; apply SDN first"
+    ip link show dev "$target_vnet" >/dev/null || die "Missing guest VNet $target_vnet; apply SDN first"
+  ;; D|E) ip link show dev "$vnet" >/dev/null || die "Missing guest VNet $vnet; apply SDN first" ;; esac
 done < "$config/permissions"
 if [ -f "$runtime/owned" ]; then
   [ "$(sed -n '1p' "$runtime/owned")" = "$(sed -n '1p' "$config/permissions")" ] || die "Disable both roots before IPv6 topology changes"
@@ -121,6 +209,7 @@ fi
 } > "$runtime/pending"
 mv "$runtime/pending" "$runtime/owned"
 printf '%s\n' "$owner" > "$runtime/owner"
+prepare_hairpin_cleanup reload
 if [ ! -f "$runtime/bridge-zones" ] || ! cmp -s "$config/bridge-zones" "$runtime/bridge-zones"; then
   # Block before changing tracking context. Old zone-0 bridge traversals may
   # already have committed null NAT bindings; new rules cannot repair them.
