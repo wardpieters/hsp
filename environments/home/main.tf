@@ -31,6 +31,8 @@ module "service" {
   node_name              = var.node_name
   network                = module.network.networks[each.key]
   ipv6_forwarded_ports   = var.he_ipv6.enabled ? [for f in values(var.he_ipv6.port_forwards) : f.port if f.guest == each.key] : []
+  ipv6_hairpin_out       = distinct([for h in values(local.he_ipv6_hairpin) : { public_address = local.he_ipv6_public_address, port = h.port } if h.source_guest == each.key])
+  ipv6_hairpin_in        = distinct([for h in values(local.he_ipv6_hairpin) : { gateway = h.target_gateway, port = h.port } if h.target_guest == each.key])
   protected_ipv6_cidrs   = local.he_ipv6_protected
   protected_cidrs        = concat([var.platform_cidr, "${var.host_address}/32"], var.protected_cidrs)
   dns_servers            = var.dns_servers

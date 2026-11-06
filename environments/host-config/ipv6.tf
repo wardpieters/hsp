@@ -11,8 +11,16 @@ variable "he_ipv6" {
     ula_prefix      = optional(string)
     mtu             = optional(number, 1480)
     protected_cidrs = optional(list(string), [])
+    hairpin         = optional(map(set(string)), {})
     port_forwards   = optional(map(object({ guest = string, port = number })), {})
   })
+  validation {
+    condition = !var.he_ipv6.enabled || try(alltrue([for source, forwards in var.he_ipv6.hairpin :
+      can(regex("^[a-z][a-z0-9-]{0,62}$", source)) && length(forwards) > 0 &&
+      alltrue([for key in forwards : can(regex("^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$", key)) && contains(keys(var.he_ipv6.port_forwards), key)])
+    ]), false)
+    error_message = "Enabled HE hairpin requires valid source names and nonempty sets of valid existing forward keys."
+  }
   default  = {}
   nullable = false
   validation {

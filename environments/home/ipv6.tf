@@ -24,8 +24,16 @@ variable "he_ipv6" {
     ula_prefix      = optional(string)
     mtu             = optional(number, 1480)
     protected_cidrs = optional(list(string), [])
+    hairpin         = optional(map(set(string)), {})
     port_forwards   = optional(map(object({ guest = string, port = number })), {})
   })
+  validation {
+    condition = !var.he_ipv6.enabled || try(alltrue([for source, forwards in var.he_ipv6.hairpin :
+      can(regex("^[a-z][a-z0-9-]{0,62}$", source)) && length(forwards) > 0 &&
+      alltrue([for key in forwards : can(regex("^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$", key)) && contains(keys(var.he_ipv6.port_forwards), key)])
+    ]), false)
+    error_message = "Enabled HE hairpin requires valid source names and nonempty sets of valid existing forward keys."
+  }
   default  = {}
   nullable = false
   validation {
@@ -56,11 +64,12 @@ variable "he_ipv6" {
   validation {
     condition = !var.he_ipv6.enabled || try(
       var.he_ipv6.local_ipv4 == var.host_address && var.proxmox_ssh != null &&
+      alltrue([for name in keys(var.he_ipv6.hairpin) : contains(keys(var.guests), name)]) &&
       alltrue([for f in values(var.he_ipv6.port_forwards) :
         contains([for p in var.guests[f.guest].public_ports : p.port if p.protocol == "tcp"], f.port)
       ]) &&
       alltrue([for name, g in var.guests : g.slot <= 65535 if
-        contains([for f in values(var.he_ipv6.port_forwards) : f.guest], name) || length(local.effective_internet_egress_ports[name]) > 0
+        contains([for f in values(var.he_ipv6.port_forwards) : f.guest], name) || length(local.effective_internet_egress_ports[name]) > 0 || contains(keys(var.he_ipv6.hairpin), name)
     ]), false)
     error_message = "Enabled HE needs host_address as local IPv4, Proxmox SSH, declared TCP public_ports on every forwarding target, and slots <=65535 for all IPv6 participants."
   }
@@ -71,7 +80,7 @@ locals {
 
 locals {
   he_ipv6_participants = var.he_ipv6.enabled ? toset([for name, g in var.guests : name if
-    contains([for f in values(var.he_ipv6.port_forwards) : f.guest], name) || length(local.effective_internet_egress_ports[name]) > 0
+    contains([for f in values(var.he_ipv6.port_forwards) : f.guest], name) || length(local.effective_internet_egress_ports[name]) > 0 || contains(keys(var.he_ipv6.hairpin), name)
   ]) : toset([])
   effective_internet_egress_ports = { for name, g in var.guests : name => distinct(concat(
     var.internet_egress_ports, g.internet_egress_ports,
@@ -79,6 +88,21 @@ locals {
   )) }
 }
 locals {
+  # Filter unresolved references here so invalid configuration is rejected by
+  # root validation without eager missing-key errors in dependent modules.
+  he_ipv6_hairpin = var.he_ipv6.enabled ? { for h in flatten([
+    for source, keys in var.he_ipv6.hairpin : [for key in keys : {
+      source_guest   = source
+      source_address = try(local.he_ipv6_networks[source].address, null)
+      source_vnet_id = try(var.guests[source].vnet_id, null)
+      forward_key    = key
+      target_guest   = try(var.he_ipv6.port_forwards[key].guest, null)
+      target_address = try(local.he_ipv6_forwards[key].address, null)
+      target_vnet_id = try(local.he_ipv6_forwards[key].vnet_id, null)
+      target_gateway = try(local.he_ipv6_networks[var.he_ipv6.port_forwards[key].guest].gateway, null)
+      port           = try(var.he_ipv6.port_forwards[key].port, null)
+    } if contains(keys(var.guests), source) && contains(keys(var.he_ipv6.port_forwards), key)]
+  ]) : "${h.source_guest}/${h.forward_key}" => h } : {}
   he_ipv6_firewall_bridges = tomap({ for name in local.he_ipv6_participants : "fwbr${var.guests[name].vm_id}i0" => local.he_ipv6_networks[name].address })
   he_ipv6_networks = { for name in local.he_ipv6_participants : name => merge(
     module.network.networks[name].ipv6, { vnet_id = module.network.networks[name].vnet_id }
@@ -109,7 +133,7 @@ locals {
   )
 }
 module "ipv6_ingress" {
-  count            = var.he_ipv6.enabled && (length(local.he_ipv6_forwards) > 0 || length(local.he_ipv6_egress) > 0) ? 1 : 0
+  count            = var.he_ipv6.enabled && (length(local.he_ipv6_forwards) > 0 || length(local.he_ipv6_egress) > 0 || length(local.he_ipv6_hairpin) > 0) ? 1 : 0
   source           = "../../modules/ipv6_ingress"
   providers        = { system = system.ingress }
   proxmox_ssh      = var.proxmox_ssh
@@ -118,6 +142,7 @@ module "ipv6_ingress" {
   protected_cidrs  = local.he_ipv6_protected
   forwards         = local.he_ipv6_forwards
   egress           = local.he_ipv6_egress
+  hairpin          = local.he_ipv6_hairpin
   firewall_bridges = local.he_ipv6_firewall_bridges
   depends_on       = [module.network, module.service]
 }

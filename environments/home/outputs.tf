@@ -43,3 +43,12 @@ output "ipv6_host_requirements" {
     protocol = r.proto, icmp_type = r.proto == "icmpv6" ? r.dport : null
   }]
 }
+
+output "ipv6_hairpin" {
+  value = { for key, h in local.he_ipv6_hairpin : key => {
+    source_guest              = h.source_guest, source_address = h.source_address, source_vnet_id = h.source_vnet_id,
+    forward_key               = h.forward_key, public_address = local.he_ipv6_public_address, protocol = "tcp", port = h.port,
+    target_guest              = h.target_guest, target_address = h.target_address, target_vnet_id = h.target_vnet_id,
+    translated_source_address = h.target_gateway
+  } }
+}
