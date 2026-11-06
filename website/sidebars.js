@@ -37,6 +37,7 @@ module.exports = {
             description: 'The original architecture and feature designs, in chronological order.',
             slug: '/engineering/designs'},
           items: [
+            {type: 'doc', id: 'docs/superpowers/specs/2026-11-06-ipv6-hairpin-design', label: 'Managed-guest IPv6 hairpin'},
             {type: 'doc', id: 'docs/superpowers/specs/2026-11-05-he-ipv6-design', label: 'HE IPv6 routing and NAT'},
             {type: 'doc', id: 'docs/superpowers/specs/2026-10-28-self-hosting-infrastructure-design', label: 'Self-hosting infrastructure'},
             {type: 'doc', id: 'docs/superpowers/specs/2026-10-30-lxc-support-design', label: 'LXC support'},
@@ -49,6 +50,7 @@ module.exports = {
             description: 'The original implementation plans and their verification steps.',
             slug: '/engineering/plans'},
           items: [
+            {type: 'doc', id: 'docs/superpowers/plans/2026-11-06-ipv6-hairpin', label: 'IPv6 hairpin implementation'},
             {type: 'doc', id: 'docs/superpowers/plans/2026-11-05-he-ipv6', label: 'HE IPv6 implementation'},
             {type: 'doc', id: 'docs/superpowers/plans/2026-10-28-self-hosting-infrastructure', label: 'Self-hosting infrastructure'},
             {type: 'doc', id: 'docs/superpowers/plans/2026-10-30-lxc-support', label: 'LXC support'},
