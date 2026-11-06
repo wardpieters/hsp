@@ -20,6 +20,17 @@ variable "protected_cidrs" {
     error_message = "Protected ranges must be canonical IPv6 CIDRs."
   }
 }
+variable "firewall_bridges" {
+  description = "Exact legacy Proxmox net0 firewall bridges mapped to their participating guest ULA. Bridge tracking uses zone 1; routed IPv6 NAT uses zone 0."
+  type        = map(string)
+  default     = {}
+  validation {
+    condition = try(length(distinct(values(var.firewall_bridges))) == length(var.firewall_bridges) && alltrue([for bridge, address in var.firewall_bridges :
+      can(regex("^fwbr[0-9]{1,9}i0$", bridge)) && contains(concat([for f in values(var.forwards) : f.address], [for e in values(var.egress) : e.address]), address)
+    ]), false)
+    error_message = "firewall_bridges must map exact net0 bridge names to distinct participating guest ULA addresses, never wildcards or unrelated interfaces."
+  }
+}
 variable "forwards" {
   type    = map(object({ guest = string, port = number, address = string, vnet_id = string }))
   default = {}

@@ -38,21 +38,29 @@ table ip6 $table {
 NFT
   transaction "$runtime/block.nft"
 }
-purge() {
-  kind=$1 public=$2 address=$3 proto=$4 port=$5
-  set -- -D -f ipv6 --zone 0
-  if [ "$kind" = D ]; then
-    set -- "$@" --orig-dst "$public" -p tcp --dport "$port"
-  else
-    [ "$proto" != icmp ] || proto=58
-    set -- "$@" --orig-src "$address" --reply-dst "$public" -p "$proto"
-    [ "$port" = none ] || set -- "$@" --dport "$port"
-  fi
+delete_connections() {
   if ! conntrack "$@" > "$runtime/conntrack.log" 2>&1; then
     if grep -F '0 flow entries have been deleted' "$runtime/conntrack.log" >/dev/null && ! grep -Ei 'error|failed|not permitted' "$runtime/conntrack.log" >/dev/null; then return 0; fi
     block
     cat "$runtime/conntrack.log" >&2
     die "IPv6 conntrack cleanup failed; blocking guard retained"
+  fi
+}
+purge() {
+  kind=$1 public=$2 address=$3 proto=$4 port=$5
+  if [ "$kind" = D ]; then
+    delete_connections -D -f ipv6 --zone 0 --orig-dst "$public" -p tcp --dport "$port"
+    # The firewall bridge sees the translated private destination.
+    delete_connections -D -f ipv6 --zone 1 --orig-dst "$address" -p tcp --dport "$port"
+  else
+    [ "$proto" != icmp ] || proto=58
+    set -- -p "$proto"
+    [ "$port" = none ] || set -- "$@" --dport "$port"
+    delete_connections -D -f ipv6 --zone 0 --orig-src "$address" --reply-dst "$public" "$@"
+    # Revoke broken pre-upgrade null-NAT bindings too, without flushing other
+    # guests/protocols/ports. Bridge tracking has no public source translation.
+    delete_connections -D -f ipv6 --zone 0 --orig-src "$address" --reply-dst "$address" "$@"
+    delete_connections -D -f ipv6 --zone 1 --orig-src "$address" "$@"
   fi
 }
 # Arm failure protection before preflight or replacement can fail. Reductions
@@ -84,10 +92,11 @@ if [ "$1" = stop ]; then
     done < "$runtime/owned"
   fi
   if nft list table ip6 "$table" >/dev/null 2>&1; then nft delete table ip6 "$table"; fi
-  rm -f "$runtime/owner" "$runtime/owned" "$runtime/state" "$runtime/block.nft" "$runtime/transaction.nft" "$runtime/conntrack.log"
+  rm -f "$runtime/owner" "$runtime/owned" "$runtime/state" "$runtime/bridge-zones" "$runtime/zone-candidates" "$runtime/block.nft" "$runtime/transaction.nft" "$runtime/conntrack.log"
   exit 0
 fi
-# Only the IPv6 zone-0 profile is supported. Never alter unrelated zone/NAT rules.
+# Routed NAT is zone 0, with only owned legacy firewall bridges in zone 1.
+# Refuse foreign zone/NAT ownership rather than modifying its configuration.
 raw=$(ip6tables-save)
 if printf '%s\n' "$raw" | grep -E -- '-j CT.*--zone' >/dev/null; then die "Conflicting IPv6 conntrack zone rule; expected zone 0"; fi
 tables=$(nft list tables)
@@ -112,6 +121,27 @@ fi
 } > "$runtime/pending"
 mv "$runtime/pending" "$runtime/owned"
 printf '%s\n' "$owner" > "$runtime/owner"
+if [ ! -f "$runtime/bridge-zones" ] || ! cmp -s "$config/bridge-zones" "$runtime/bridge-zones"; then
+  # Block before changing tracking context. Old zone-0 bridge traversals may
+  # already have committed null NAT bindings; new rules cannot repair them.
+  block
+  # Only guests whose bridge context changed need their bindings migrated.
+  # Adding a new guest must not reset established sessions on other bridges.
+  {
+    if [ -f "$runtime/bridge-zones" ]; then cat "$runtime/bridge-zones"; fi
+    cat "$config/bridge-zones"
+  } | sort -u > "$runtime/zone-candidates"
+  while IFS='|' read -r bridge changed_address; do
+    [ -n "$bridge" ] && [ -n "$changed_address" ] || continue
+    row="$bridge|$changed_address"
+    if [ -f "$runtime/bridge-zones" ] && grep -Fx -- "$row" "$runtime/bridge-zones" >/dev/null && grep -Fx -- "$row" "$config/bridge-zones" >/dev/null; then continue; fi
+    while IFS='|' read -r kind public address proto port vnet; do
+      case "$kind" in D|E)
+        [ "$address" != "$changed_address" ] || purge "$kind" "$public" "$address" "$proto" "$port"
+      ;; esac
+    done < "$runtime/owned"
+  done < "$runtime/zone-candidates"
+fi
 transaction "$config/rules.nft"
 while IFS='|' read -r kind public address proto port vnet; do
   case "$kind" in D|E)
@@ -121,3 +151,4 @@ while IFS='|' read -r kind public address proto port vnet; do
 done < "$runtime/owned"
 cp "$config/permissions" "$runtime/state"
 cp "$config/permissions" "$runtime/owned"
+cp "$config/bridge-zones" "$runtime/bridge-zones"

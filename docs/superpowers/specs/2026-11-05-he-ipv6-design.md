@@ -272,8 +272,8 @@ flushes the full nftables/iptables ruleset or replaces `pve-firewall`.
 
 Use native nftables tables alongside the established iptables-based
 `pve-firewall`; this does not enable `proxmox-firewall` or switch its backend.
-The supported HE IPv6 conntrack zone is 0. Existing IPv4 SNAT zone rules
-remain untouched. ULA subnets have `snat = false`; preflight must identify
+The routed HE IPv6 conntrack zone is 0; exact participating legacy firewall
+bridges use zone 1 before tracking. Existing IPv4 SNAT zone rules remain untouched. ULA subnets have `snat = false`; preflight must identify
 conflicting IPv6 conntrack-zone/NAT rules and stop with actionable guidance
 instead of blindly applying broad `fwbr+` zone rules. Verify the effective
 zone on request AND reply paths during live acceptance.
@@ -480,3 +480,23 @@ backend switch or if existing IPv6 conntrack rules conflict.
 - No live apply, automatic guest/network restart, router change or old-tunnel access.
 - Preserve all pre-existing checkout changes and private tfvars; stage only this feature's own changes.
 - Keep the established pve-firewall backend and existing IPv4 resource identities; never flush global rules or conntrack.
+
+## Operator-tested corrections (2026-11-06)
+
+A supplied packet capture shows permitted guest packets leaving `hsp-he6`
+with a private source, confirming failed source translation. The original
+all-zone-0 bridge assumption is superseded: exact participating legacy
+`fwbr<VMID>i0` interfaces use zone 1 before connection tracking, while
+routed NAT remains in zone 0. Derive bridge names from VM/CT IDs, never
+from arbitrary VNet names; map each bridge to its assigned ULA for cleanup.
+On adoption, migrate affected null-NAT bindings under a blocking guard.
+On later bridge changes, purge only affected guest tuples; preserve
+unchanged guests, permissions and unrelated tracking in both zones.
+
+Keep native BPG firewall ownership. Portless outbound ICMP uses canonical
+`ipv6-icmp`; typed rules keep the legacy `icmpv6`/numeric-dport encoding
+because BPG 0.118.1 does not expose `icmp-type`. The operator explicitly
+accepted the remaining typed-rule editor warning instead of introducing
+helper files or an alternate ownership mechanism. No new Perl policy
+helper/security-group architecture is included. No live apply, merge, push
+or local VM/container test is part of this correction.

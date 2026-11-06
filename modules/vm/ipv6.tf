@@ -49,7 +49,7 @@ locals {
       source = "::/0", proto = "tcp", dport = tostring(port), comment = "hsp:ipv6:public:tcp:${port}"
     })],
     [for p in var.internet_egress_ports : merge(local.base_rule, {
-      type    = "out", dest = "::/0", proto = p.protocol == "icmp" ? "icmpv6" : p.protocol,
+      type    = "out", dest = "::/0", proto = p.protocol == "icmp" ? "ipv6-icmp" : p.protocol,
       dport   = p.protocol == "icmp" ? null : tostring(p.port),
       comment = p.protocol == "icmp" ? "hsp:ipv6:internet:icmp" : "hsp:ipv6:internet:${p.protocol}:${p.port}"
     })]

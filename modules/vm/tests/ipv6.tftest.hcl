@@ -33,7 +33,7 @@ run "vm_ipv6_and_egress" {
     error_message = "Enabled VM must receive static ULA and exact anti-spoof source entries."
   }
   assert {
-    condition     = toset([for r in output.rules : "${r.proto}:${coalesce(r.dport, "none")}" if r.type == "out" && r.dest == "::/0" && r.action == "ACCEPT"]) == toset(["tcp:443", "udp:123", "icmpv6:none"])
+    condition     = toset([for r in output.rules : "${r.proto}:${coalesce(r.dport, "none")}" if r.type == "out" && r.dest == "::/0" && r.action == "ACCEPT"]) == toset(["tcp:443", "udp:123", "ipv6-icmp:none"])
     error_message = "Effective configured TCP/UDP/ICMP must apply to IPv6 with no ICMP port."
   }
   assert {

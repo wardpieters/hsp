@@ -7,7 +7,7 @@ before(async () => {
   revoked = await renderedFiles('modules/ipv6_ingress', 'tests/ingress.tftest.hcl', 'revoked');
 });
 const vip = '2001:470:1f15:4d6::2', guest = 'fd42:77:1:1::2';
-const files = f => ({ 'rules.nft': f.ingress_rules, permissions: f.ingress_permissions });
+const files = f => ({ 'rules.nft': f.ingress_rules, permissions: f.ingress_permissions, 'bridge-zones': f.ingress_zones ?? '' });
 async function fixture(t) {
   const f = await networkFixture(t, enabled.ingress_helper, files(enabled));
   await f.seed({ links: { 'hsp-he6': {}, hsp1002: {}, hsp1001: {} } });
@@ -77,4 +77,44 @@ test('Terraform teardown retries helper after failed ExecStop leaves service ina
   await f.teardown(enabled.teardown.command);
   assert.equal((await f.read()).tables.hsp_he_ingress, undefined);
   assert.deepEqual((await f.read()).flows.map(f => f.id), ['unrelated']);
+});
+
+test('adopting bridge zones removes broken untranslated flows and only owned bridge flows', async t => {
+  const f = await fixture(t);
+  await f.configure({ 'bridge-zones': '' }); await f.run('start');
+  const broken = [
+    { id: 'broken-https', origSrc: guest, replyDst: guest, proto: 'tcp', port: 443, zone: 0 },
+    { id: 'broken-ping', origSrc: guest, replyDst: guest, proto: '58', zone: 0 },
+    { id: 'bridge-ping', origSrc: guest, replyDst: guest, proto: '58', zone: 1 },
+    { id: 'incoming-bridge', origSrc: '2001:db8::7', origDst: 'fd42:77:1:2::2', proto: 'tcp', port: 443, zone: 1 },
+    { id: 'foreign-bridge', origSrc: 'fd42:77:1:3::2', proto: '58', zone: 1 },
+    { id: 'foreign-default', origSrc: '2001:db8::7', proto: 'tcp', port: 443, zone: 0 },
+  ];
+  await f.seed({ flows: broken });
+  await f.configure({ 'bridge-zones': 'fwbr1001i0|fd42:77:1:1::2\nfwbr1002i0|fd42:77:1:2::2\n' }); await f.run('reload');
+  assert.deepEqual((await f.read()).flows.map(f => f.id), ['foreign-bridge', 'foreign-default']);
+  assert(!((await f.read()).log.some(x => /conntrack.*(?:-F|--flush)/.test(x))));
+  await f.seed({ flows: broken }); await f.run('reload');
+  assert.deepEqual((await f.read()).flows, broken, 'unchanged bridge profile must preserve sessions');
+});
+
+test('bridge-zone migration cleanup failure blocks traffic until a successful retry', async t => {
+  const f = await fixture(t); await f.configure({ 'bridge-zones': '' }); await f.run('start');
+  await f.configure({ 'bridge-zones': 'fwbr1001i0|fd42:77:1:1::2\n' });
+  await f.seed({ fail: { tool: 'conntrack', match: '-D' } });
+  await assert.rejects(f.run('reload'));
+  assert.match((await f.read()).tables.hsp_he_ingress, /iifname "hsp-he6" drop/);
+  await f.run('reload'); assert.match((await f.read()).tables.hsp_he_ingress, /snat to/);
+});
+
+test('adding a guest bridge preserves established sessions for existing guests', async t => {
+  const f = await fixture(t);
+  await f.configure({ 'bridge-zones': 'fwbr1001i0|fd42:77:1:1::2\n' }); await f.run('start');
+  const existing = [
+    { id: 'retained-routed', origSrc: guest, replyDst: vip, proto: 'tcp', port: 443, zone: 0 },
+    { id: 'retained-bridge', origSrc: guest, replyDst: guest, proto: '58', zone: 1 },
+  ];
+  await f.seed({ flows: [...existing, { id: 'new-bridge', origDst: 'fd42:77:1:2::2', proto: 'tcp', port: 443, zone: 1 }] });
+  await f.configure({ 'bridge-zones': 'fwbr1001i0|fd42:77:1:1::2\nfwbr1002i0|fd42:77:1:2::2\n' });
+  await f.run('reload'); assert.deepEqual((await f.read()).flows, existing);
 });

@@ -20,7 +20,7 @@ resource "system_file" "ingress_rules" {
   path = "${system_folder.config.path}/rules.nft"
   content = templatefile("${path.module}/templates/ingress.nft.tftpl", {
     public = var.public_address, ula = var.ula_prefix, forwards = var.forwards,
-    egress = local.egress_rules, protected = local.protected
+    egress = local.egress_rules, protected = local.protected, firewall_bridges = var.firewall_bridges
   })
   uid  = 0
   gid  = 0
@@ -29,6 +29,13 @@ resource "system_file" "ingress_rules" {
 resource "system_file" "ingress_permissions" {
   path    = "${system_folder.config.path}/permissions"
   content = "${local.permissions}\n"
+  uid     = 0
+  gid     = 0
+  mode    = "600"
+}
+resource "system_file" "ingress_zones" {
+  path    = "${system_folder.config.path}/bridge-zones"
+  content = length(var.firewall_bridges) == 0 ? "" : "${join("\n", [for bridge in sort(keys(var.firewall_bridges)) : "${bridge}|${var.firewall_bridges[bridge]}"])}\n"
   uid     = 0
   gid     = 0
   mode    = "600"
@@ -69,7 +76,7 @@ resource "system_file" "unit" {
   mode    = "644"
 }
 resource "terraform_data" "revision" {
-  lifecycle { replace_triggered_by = [system_file.ingress_helper, system_file.ingress_rules, system_file.ingress_permissions, system_file.unit] }
+  lifecycle { replace_triggered_by = [system_file.ingress_helper, system_file.ingress_rules, system_file.ingress_permissions, system_file.ingress_zones, system_file.unit] }
 }
 resource "system_service_systemd" "ingress" {
   name       = "hsp-ipv6-ingress"
@@ -97,7 +104,7 @@ resource "terraform_data" "teardown" {
       error_message = "HE IPv6 needs SSH agent connection settings for retryable teardown; retain them until removal completes."
     }
   }
-  depends_on = [system_file.unit, system_file.ingress_rules, system_file.ingress_permissions]
+  depends_on = [system_file.unit, system_file.ingress_rules, system_file.ingress_permissions, system_file.ingress_zones]
 }
 
 module "teardown" {

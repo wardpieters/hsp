@@ -379,3 +379,19 @@ run "managed_host_control_only" {
     error_message = "Managed host rules accept HE transport/control without public IPv6 management."
   }
 }
+
+run "bridge_tracking_uses_vm_id_not_vnet_name" {
+  command = plan
+  variables {
+    he_ipv6               = { enabled = true, server_ipv4 = "216.66.84.46", local_ipv4 = "192.168.100.10", client_ipv6 = "2001:470:1f14:4d4::2/64", server_ipv6 = "2001:470:1f14:4d4::1", routed_prefix = "2001:470:1f15:4d6::/64", ula_prefix = "fd42:77:1::/48" }
+    internet_egress_ports = [{ protocol = "icmp" }]
+    guests = {
+      proxy-public = { vm_id = 1002, slot = 2, vnet_id = "hsp9002", role = "public_proxy" }
+      cloud        = { vm_id = 101, slot = 1, vnet_id = "hsp9001" }
+    }
+  }
+  assert {
+    condition     = local.he_ipv6_firewall_bridges == tomap({ fwbr101i0 = "fd42:77:1:1::2", fwbr1002i0 = "fd42:77:1:2::2" })
+    error_message = "Legacy bridge identities follow VM/CT IDs even when VNet names differ."
+  }
+}

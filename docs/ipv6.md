@@ -88,9 +88,17 @@ shell and the existing `pve-firewall` backend available. Install missing
 `nftables`/`conntrack` packages through your normal host-management process.
 HSP uses separate native nftables tables alongside `pve-firewall`; it does
 not switch to the `proxmox-firewall` backend or replace global firewall
-configuration. Nonzero/custom IPv6 conntrack-zone rules and other IPv6/inet
-NAT rules are conservatively rejected by preflight. Existing IPv4 zone/NAT
-rules remain unchanged.
+configuration. Routed IPv6 NAT uses conntrack zone 0. Only the exact
+`fwbr<VMID>i0` bridges of participating guests use zone 1 before tracking;
+this prevents an earlier bridge traversal from committing an untranslated
+NAT binding before routing through `hsp-he6`. Foreign IPv6 zone/NAT ownership
+is rejected by preflight. Existing IPv4 zone/NAT rules remain unchanged.
+
+On first adoption, this correction briefly blocks forwarding and clears
+affected IPv6 connections, including old untranslated bindings. Later
+bridge changes migrate only the affected guests; unchanged guests retain
+their sessions. Permission revocation/removal cleans the configured tuples
+in both contexts, without flushing other guests or host traffic.
 
 Both roots need SSH-agent access to the same Proxmox node. In home, set the
 existing `proxmox_ssh` object; non-root users need passwordless sudo. Its
@@ -188,7 +196,7 @@ Terraform mocks or the fake-command tests:
 | Check | Expected result |
 | --- | --- |
 | `systemctl status hsp-he-ipv6 hsp-ipv6-ingress`; `ip -d tunnel show hsp-he6`; `ip -6 addr`; `ip -6 route show table all` | Owned tunnel/VIP, per-slot ULA routes, reserved blackhole/default routes; no changes to IPv4. UP alone does not prove HE connectivity. |
-| `nft list table ip6 hsp_he_host`; `nft list table ip6 hsp_he_ingress`; `ip6tables-save`; `conntrack -L -f ipv6 -o extended` | Correct syntax/compiled rules, counters, and zone 0 in both directions including legacy firewall bridges. The router guard skips intermediate `fwbr*` legs; native guest filtering still applies there and the routed hop must hit the guard. |
+| `nft list table ip6 hsp_he_host`; `nft list table ip6 hsp_he_ingress`; `ip6tables-save`; `conntrack -L -f ipv6 -o extended` | Correct syntax/compiled rules, counters, and zone 0 on the routed/NAT hop and zone 1 on exact owned legacy firewall bridges, in both directions. The router guard skips intermediate `fwbr*` legs; native guest filtering still applies there and the routed hop must hit the guard. |
 | External `curl -6 --resolve 'mail.example.com:443:[2001:470:1f15:4d6::2]' https://mail.example.com/` | Correct GUI through the proxy before public DNS publication. |
 | Ready SMTP/submission/IMAP with TLS/STARTTLS | Correct mail guest; application logs contain the original external IPv6 client. |
 | Egress-only guest: allowed TCP/UDP and `ping -6` with configured ICMP | Connections/replies work; remote service sees the shared public VIP. Unlisted ports remain denied. |
@@ -230,3 +238,14 @@ Use the full disable/reconfigure/enable cycle for routed/ULA prefix or
 participating guest-slot changes. A two-root edit/apply is not atomic. To
 restore the former endpoint, stop/remove this endpoint first, then manually
 restore the old NAT target/startup. The implementation never accesses it.
+
+## Native ICMP rule display
+
+Portless outbound ICMPv6 rules use the UI's canonical `ipv6-icmp` name.
+The pinned BPG provider does not expose the separate `icmp-type` field,
+so typed NDP/error/control rules retain the legacy `icmpv6` plus numeric
+`dport` encoding supported by `pve-firewall`. The Proxmox editor can mark
+that alias invalid and show a blank ICMP-type field even when the rule
+compiles. Do not simply rename those typed rules: the legacy numeric type
+encoding depends on the `icmpv6` spelling. Native firewall ownership is
+retained; this configuration adds no Perl policy helper or security groups.

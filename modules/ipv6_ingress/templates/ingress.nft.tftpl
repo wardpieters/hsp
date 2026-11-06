@@ -1,5 +1,15 @@
 table ip6 hsp_he_ingress {
   comment "hsp:ipv6-edge:v1"
+%{ if length(firewall_bridges) > 0 ~}
+  # A bridge traversal must not commit an untranslated zone-0 NAT binding
+  # before the same packet reaches the routed tunnel postrouting hook.
+  chain bridge_tracking {
+    type filter hook prerouting priority -300; policy accept;
+%{ for bridge in sort(keys(firewall_bridges)) ~}
+    iifname "${bridge}" ct zone set 1
+%{ endfor ~}
+  }
+%{ endif ~}
   chain prerouting {
     type nat hook prerouting priority -101; policy accept;
 %{ for f in forwards ~}

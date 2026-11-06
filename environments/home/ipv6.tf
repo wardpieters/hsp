@@ -79,6 +79,7 @@ locals {
   )) }
 }
 locals {
+  he_ipv6_firewall_bridges = tomap({ for name in local.he_ipv6_participants : "fwbr${var.guests[name].vm_id}i0" => local.he_ipv6_networks[name].address })
   he_ipv6_networks = { for name in local.he_ipv6_participants : name => merge(
     module.network.networks[name].ipv6, { vnet_id = module.network.networks[name].vnet_id }
   ) }
@@ -108,14 +109,15 @@ locals {
   )
 }
 module "ipv6_ingress" {
-  count           = var.he_ipv6.enabled && (length(local.he_ipv6_forwards) > 0 || length(local.he_ipv6_egress) > 0) ? 1 : 0
-  source          = "../../modules/ipv6_ingress"
-  providers       = { system = system.ingress }
-  proxmox_ssh     = var.proxmox_ssh
-  public_address  = local.he_ipv6_public_address
-  ula_prefix      = var.he_ipv6.ula_prefix
-  protected_cidrs = local.he_ipv6_protected
-  forwards        = local.he_ipv6_forwards
-  egress          = local.he_ipv6_egress
-  depends_on      = [module.network, module.service]
+  count            = var.he_ipv6.enabled && (length(local.he_ipv6_forwards) > 0 || length(local.he_ipv6_egress) > 0) ? 1 : 0
+  source           = "../../modules/ipv6_ingress"
+  providers        = { system = system.ingress }
+  proxmox_ssh      = var.proxmox_ssh
+  public_address   = local.he_ipv6_public_address
+  ula_prefix       = var.he_ipv6.ula_prefix
+  protected_cidrs  = local.he_ipv6_protected
+  forwards         = local.he_ipv6_forwards
+  egress           = local.he_ipv6_egress
+  firewall_bridges = local.he_ipv6_firewall_bridges
+  depends_on       = [module.network, module.service]
 }
