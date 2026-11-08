@@ -49,7 +49,10 @@ if(tool==='conntrack') {
  const filters={'--orig-src':'origSrc','--orig-dst':'origDst','--reply-dst':'replyDst','--reply-src':'replySrc','--sport':'origSport','--dport':'port','-p':'proto','--zone':'zone'};
  const matches=flow=>Object.entries(filters).every(([flag,key])=>!a.includes(flag)||String(flow[key])===a[a.indexOf(flag)+1]);
  if(a.includes('-L'))done(s.enumeration??s.flows.filter(matches).map(f=>['ipv6', 10, f.proto, f.proto==='tcp'?6:f.proto, 120, 'ESTABLISHED', 'src='+f.origSrc, 'dst='+(f.origDst??'2001:db8::8'), 'sport='+(f.origSport??50000), 'dport='+(f.port??0), 'src='+(f.replySrc??f.origDst??'2001:db8::8'), 'dst='+f.replyDst, 'sport='+(f.port??0), 'dport='+(f.replyDport??f.origSport??50000), '[ASSURED]', 'mark=0', 'use=1'].join(' ')).join('\\n'));
- if(a.includes('-D'))s.flows=s.flows.filter(flow=>!Object.entries(filters).every(([flag,key])=>!a.includes(flag)||String(flow[key])===a[a.indexOf(flag)+1]));
+ if(a.includes('-D')) {
+  (s.conntrackDeletes??=[]).push({command:cmd,rules:s.tables.hsp_he_ingress??''});
+  s.flows=s.flows.filter(flow=>!Object.entries(filters).every(([flag,key])=>!a.includes(flag)||String(flow[key])===a[a.indexOf(flag)+1]));
+ }
  done();
 }
 if(tool==='nft') {

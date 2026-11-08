@@ -134,3 +134,52 @@ run "empty_hairpin_preserves_policy" {
     error_message = "Empty grants must preserve baseline policy exactly."
   }
 }
+
+run "reject_noncanonical_global_vip" {
+  command = plan
+  variables {
+    network          = { address = "10.77.0.2", gateway = "10.77.0.1", cidr = "10.77.0.0/30", vnet_id = "hsp100", ipv6 = { cidr = "fd42:77:1:2::/64", gateway = "fd42:77:1:2::1", address = "fd42:77:1:2::2" } }
+    ipv6_hairpin_out = [{ public_address = "2001:0470:1f15:4d6::2", port = 443 }]
+  }
+  expect_failures = [var.ipv6_hairpin_out]
+}
+
+run "reject_outgoing_zero_port" {
+  command = plan
+  variables {
+    network          = { address = "10.77.0.2", gateway = "10.77.0.1", cidr = "10.77.0.0/30", vnet_id = "hsp100", ipv6 = { cidr = "fd42:77:1:2::/64", gateway = "fd42:77:1:2::1", address = "fd42:77:1:2::2" } }
+    ipv6_hairpin_out = [{ public_address = "2001:470:1f15:4d6::2", port = 0 }]
+  }
+  expect_failures = [var.ipv6_hairpin_out]
+}
+
+run "reject_outgoing_overflow_port" {
+  command = plan
+  variables {
+    network          = { address = "10.77.0.2", gateway = "10.77.0.1", cidr = "10.77.0.0/30", vnet_id = "hsp100", ipv6 = { cidr = "fd42:77:1:2::/64", gateway = "fd42:77:1:2::1", address = "fd42:77:1:2::2" } }
+    ipv6_hairpin_out = [{ public_address = "2001:470:1f15:4d6::2", port = 65536 }]
+  }
+  expect_failures = [var.ipv6_hairpin_out]
+}
+
+# Reject incoming boundary values with otherwise valid forwarding inputs.
+run "reject_incoming_zero_port" {
+  command = plan
+  variables {
+    network              = { address = "10.77.0.2", gateway = "10.77.0.1", cidr = "10.77.0.0/30", vnet_id = "hsp100", ipv6 = { cidr = "fd42:77:1:2::/64", gateway = "fd42:77:1:2::1", address = "fd42:77:1:2::2" } }
+    ipv6_forwarded_ports = [443]
+    ipv6_hairpin_in      = [{ gateway = "fd42:77:1:2::1", port = 0 }]
+  }
+  expect_failures = [var.ipv6_hairpin_in]
+}
+
+# Reject incoming boundary values with otherwise valid forwarding inputs.
+run "reject_incoming_overflow_port" {
+  command = plan
+  variables {
+    network              = { address = "10.77.0.2", gateway = "10.77.0.1", cidr = "10.77.0.0/30", vnet_id = "hsp100", ipv6 = { cidr = "fd42:77:1:2::/64", gateway = "fd42:77:1:2::1", address = "fd42:77:1:2::2" } }
+    ipv6_forwarded_ports = [443]
+    ipv6_hairpin_in      = [{ gateway = "fd42:77:1:2::1", port = 65536 }]
+  }
+  expect_failures = [var.ipv6_hairpin_in]
+}

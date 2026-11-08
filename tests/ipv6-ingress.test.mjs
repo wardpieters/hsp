@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test, { before } from 'node:test';
+import { readFile } from 'node:fs/promises';
 import { networkFixture, renderedFiles } from './helpers/network-fixture.mjs';
 let enabled, revoked;
 const hairpin = {};
@@ -207,4 +208,48 @@ test('forward remap snapshots hairpin before DNAT cleanup', async t => {
   assert.deepEqual((await f.read()).flows.map(x => x.id), ['internet']);
   const log = (await f.read()).log;
   assert(log.findIndex(x => x.startsWith('conntrack -L')) < log.findIndex(x => x.startsWith('conntrack -D')));
+});
+
+// A remap's old public-port purge must finish before replacement traffic enters.
+test('forward remap keeps replacement closed through old D cleanup', async t => {
+  const f = await hairpinFixture(t); await f.configure(files(hairpin.remapped)); await f.run('reload');
+  const purges = (await f.read()).conntrackDeletes.filter(x => x.command === '-D -f ipv6 --zone 0 --orig-dst ' + vip + ' -p tcp --dport 443');
+  assert.equal(purges.length, 1);
+  assert.match(purges[0].rules, /iifname "hsp-he6" drop/);
+  assert(!purges[0].rules.includes('dnat to'));
+  assert.match((await f.read()).tables.hsp_he_ingress, /dnat to fd42:77:1:3::2/);
+});
+test('grant revocation removes orphan source bridge without guessing target port', async t => {
+  const f = await hairpinFixture(t);
+  const selected = hairpinFlows().filter(x => ['cloud-source', 'cloud-bridge', 'other-client-source', 'other-client-bridge'].includes(x.id));
+  await f.seed({ flows: selected, fail: { tool: 'conntrack', match: '-D -f ipv6 --zone 1 --orig-src ' + guest } });
+  await f.configure(files(hairpin.grant_revoked)); await assert.rejects(f.run('reload'));
+  assert.match(await readFile(f.dir + '/runtime/hairpin-pending', 'utf8'), /S\|fd42:77:1:1::2\|2001:470:1f15:4d6::2\|none\|443/);
+  await f.run('reload');
+  assert.deepEqual((await f.read()).flows.map(x => x.id), ['cloud-bridge', 'other-client-source', 'other-client-bridge']);
+});
+test('egress revocation removes orphan Internet bridge and preserves P source bridge', async t => {
+  const f = await hairpinFixture(t);
+  const internet = hairpinFlows().find(x => x.id === 'internet');
+  const bridge = { ...internet, id: 'orphan-internet-bridge', zone: 1, replyDst: guest };
+  const retained = hairpinFlows().filter(x => ['cloud-source', 'other-client-source', 'other-client-bridge'].includes(x.id));
+  await f.seed({ flows: [bridge, ...retained], fail: { tool: 'conntrack', match: '-D -f ipv6 --zone 1 --orig-src ' + guest } });
+  await f.configure(files(hairpin.egress_revoked)); await assert.rejects(f.run('reload'));
+  assert.match(await readFile(f.dir + '/runtime/hairpin-pending', 'utf8'), /B\|fd42:77:1:1::2\|2001:db8::8\|52000\|443/);
+  await f.run('reload');
+  assert.deepEqual((await f.read()).flows, retained);
+});
+test('invalid E remote addresses and reply relationships never publish a journal and allow retry', async t => {
+  for (const [destination, replySource] of [
+    [':::::', ':::::'], ['2001:db8:::8', '2001:db8:::8'], ['2001:db8:0:0:0:0:0:0:8', '2001:db8:0:0:0:0:0:0:8'],
+    ['2001:db8::8', '2001:db8::9'], ['2001:db8::8', ':::::'],
+  ]) await t.test(destination + ' / ' + replySource, async t => {
+    const f = await hairpinFixture(t); await f.configure(files(hairpin.egress_revoked));
+    await f.seed({ enumeration: 'ipv6 10 tcp 6 120 ESTABLISHED src=' + guest + ' dst=' + destination + ' sport=52000 dport=443 src=' + replySource + ' dst=' + vip + ' sport=443 dport=52000 [ASSURED] mark=0 use=1' });
+    await assert.rejects(f.run('reload'));
+    assert.match((await f.read()).tables.hsp_he_ingress, /iifname "hsp-he6" drop/);
+    await assert.rejects(readFile(f.dir + '/runtime/hairpin-pending'), { code: 'ENOENT' });
+    await f.seed({ enumeration: null }); await f.run('reload');
+    assert.deepEqual((await f.read()).flows, hairpinFlows().filter(x => x.id !== 'internet'));
+  });
 });
