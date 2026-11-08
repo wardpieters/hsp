@@ -2,7 +2,8 @@
 
 **Date:** 2026-11-06
 
-**Status:** Approved on 2026-11-06; implementation has not started.
+**Status:** Approved on 2026-11-06; implemented and offline verified. Linux
+live acceptance remains pending.
 
 **Baseline:** [HE IPv6 design](2026-11-05-he-ipv6-design.md), including the
 2026-11-06 corrections for legacy firewall bridge tracking (`c364523`).
@@ -21,8 +22,9 @@ outside this extension. A VPN gateway guest can be an explicitly granted
 client, but Terraform does not configure VPN client routing or translation;
 only traffic bearing that guest's exact assigned ULA is eligible.
 
-This document specifies future behavior. The existing operator guides still
-describe the deployed baseline until implementation updates them.
+This document records the approved implementation contract. Operator guides
+describe the implemented behavior; deployment and Linux live acceptance are
+separate operator steps, not outcomes proven by offline tests.
 
 ## Current behavior and constraints
 

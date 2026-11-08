@@ -14,5 +14,11 @@ he_ipv6 = {
     http  = { guest = "proxy-public", port = 80 }
     https = { guest = "proxy-public", port = 443 }
   }
+  hairpin = {} # Opt in only named managed guests to existing TCP forward keys.
+  # Example opt-in (replace the empty map above; guest names must exist):
+  # hairpin = {
+  #   monitoring   = ["https"]
+  #   proxy-public = ["https"] # Self-hairpin.
+  # }
   # Outgoing IPv6 inherits effective global/per-guest/role internet_egress_ports.
 }

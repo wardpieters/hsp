@@ -1,4 +1,4 @@
-# Optional HE IPv6: public ports and internet egress
+# Optional HE IPv6: public ports, internet egress and managed hairpin
 
 HSP can terminate a Hurricane Electric (HE) 6in4 tunnel on Proxmox. It uses
 one public IPv6 address for TCP port forwards and permitted guest internet
@@ -7,7 +7,10 @@ traffic. The feature defaults off. IPv4-only deployments need no new values.
 Incoming TCP ports are destination-NATed to individual guests. Outgoing
 TCP/UDP/ICMP is allowed by the existing effective `internet_egress_ports`
 list and source-NATed to the shared public address. Incoming clients retain
-their real IPv6 source address. Guest VNets remain separate.
+their real IPv6 source address. Explicitly granted managed guests can also
+reach the public TCP forwards locally, including their own service. These
+hairpin requests use the target ULA gateway as their source. Guest VNets
+remain separate; this does not grant direct ULA access.
 
 ## Addressing and configuration
 
@@ -53,6 +56,7 @@ he_ipv6 = {
     http  = { guest = "proxy-public", port = 80 }
     https = { guest = "proxy-public", port = 443 }
   }
+  hairpin = {} # Optional managed-guest grants are separate from internet egress.
 }
 ```
 
@@ -67,9 +71,9 @@ only after declaring the guest, configuring its listeners and explicitly
 listing its ports, for example `smtp = { guest = "mail", port = 25 }`.
 No mail guest or mail software is automatically installed.
 
-Guests receive ULA addresses when they have a forward OR a nonempty
-effective internet-egress list. Global, per-guest and role defaults are
-combined exactly as for IPv4; monitoring inherits TCP 80/443. Thus global
+Guests receive ULA addresses when they have a forward, a nonempty
+effective internet-egress list, OR an explicit hairpin source grant. Global,
+per-guest and role defaults are combined exactly as for IPv4; monitoring inherits TCP 80/443. Thus global
 UDP 123 gives **every guest** IPv6 when HE is enabled. A guest's empty local
 list still inherits global/role permissions. Egress-only guests need no
 `public_ports` and receive no incoming listener allowance.
@@ -80,6 +84,74 @@ Required NDP/DAD and ICMPv6 error messages work independently. There is no
 separate IPv6-egress flag. Fixed DNS/NTP infrastructure exceptions remain
 IPv4; local Pi-hole records remain IPv4-only. Public DNS queries over IPv4
 can still return AAAA answers for internet destinations.
+
+## Managed-guest hairpin grants
+
+The default `hairpin = {}` grants no local access to the public VIP. Inside
+`he_ipv6`, opt in existing source guests to existing `port_forwards` keys:
+
+```hcl
+hairpin = {
+  monitoring   = ["https"]
+  proxy-public = ["https"] # The target can call its own public service.
+}
+```
+
+Each set must be nonempty. Grants name forward keys, not destination guest
+names or arbitrary ports. Targets still need the declared TCP `public_ports`
+entry and a working listener on their ULA address or IPv6 wildcard. Roles
+never generate hairpin grants. An explicit grant is an operator-authorized
+exception to protected-destination denial, including for restrictive VPN
+roles, limited to that VIP and TCP port.
+
+Internet egress (E) and hairpin (P) are independent permissions: TCP443
+internet access does not grant VIP TCP443, and a hairpin grant adds no
+internet access. A hairpin-only VM/LXC receives its slot ULA /64, gateway
+and native firewall policy, without a public listener or internet allowance.
+Removing its last grant removes IPv6 participation only if no forwarding or
+effective-egress reason remains; IPv4 identity is preserved.
+
+For source A, target B and port P, requests start as
+`A_ULA:client_port -> VIP:P`. Routed DNAT and SNAT deliver `B_gateway:translated_port -> B_ULA:P`;
+replies reach A as `VIP:P -> A_ULA:client_port`. The kernel may translate
+source ports so concurrent clients can reuse the same original port. This
+also applies when A equals B. Applications log the gateway identity for
+hairpin clients; external HE clients retain their actual IPv6 source.
+
+Only exact assigned managed-guest ULA sources are eligible. LAN/VPN client
+prefixes, host-originated requests, IPv4 hairpin, UDP forwarding and direct
+ULA dependencies remain outside this feature. A VPN gateway guest can be
+granted access, but its clients must reach the VIP bearing that guest's
+exact assigned ULA; VPN routing/translation is operator-owned. No DNS
+changes are made: local Pi-hole records remain IPv4-only. Use an explicit
+VIP connection or a deliberate client-side resolution override for testing.
+
+On an already enabled HE deployment, pass the same shared file to both
+roots and review both plans. Adding grants changes home; host-config
+accepts the field but should show no networking delta. Apply the reviewed
+home plan deliberately. Keep stopped-first provisioning for new guests and
+verify the ULA address, gateway and route inside an existing guest OS before
+testing: a cloud-init plan alone does not prove the address is active.
+
+Inspect `terraform -chdir=environments/home output ipv6_hairpin` for desired
+grants keyed by `source_guest/forward_key`. Each value gives source guest,
+address and VNet, forward key, public address, TCP protocol/port, target
+guest, address and VNet, and `translated_source_address` (target gateway).
+It is `{}` when off or unconfigured. This output describes desired state,
+not service health or proof of successful Linux packet traversal.
+
+Remove a grant from the shared map and apply the reviewed home plan with
+SSH retained until cleanup succeeds. Removing P must preserve independent
+E and other clients' P sessions, even on the same port; removing E must
+preserve independent P. The helper withdraws affected authorization before
+purging exact zone-0 and both zone-1 views. Its private runtime
+`hairpin-pending` journal persists original/translated port snapshots before
+deletion, so retry can finish target-side cleanup after zone 0 is gone.
+On failure, retain the blocking guard and recovery files, repair the
+reported problem and reconcile/retry through the existing helper lifecycle.
+Do not delete the journal, flush conntrack globally or treat a failed stop
+as completed removal. Full feature disable still follows home before
+host-config as described below.
 
 ## Prerequisites and ownership
 
@@ -142,6 +214,7 @@ terraform -chdir=environments/host-config output he_ipv6_status
 terraform -chdir=environments/home output ipv6_networks
 terraform -chdir=environments/home output ipv6_port_forwards
 terraform -chdir=environments/home output ipv6_egress
+terraform -chdir=environments/home output ipv6_hairpin
 terraform -chdir=environments/home output ipv6_host_requirements
 ```
 
@@ -184,14 +257,18 @@ example.com.     MX 10 mail.example.com.
 ```
 
 Existing A records stay. Local Pi-hole DNS remains IPv4-only, and HE's
-optional resolvers are not configured automatically. IPv6 LAN/VPN hairpin
-forwarding is outside this feature; IPv4-only LAN clients keep using A
-records and their existing routes.
+optional resolvers are not configured automatically. Hairpin is limited to
+explicitly granted managed guests; IPv6 LAN/VPN client-prefix hairpin remains
+outside this feature. IPv4-only LAN clients keep using A records and their
+existing routes.
 
 ## Live acceptance
 
 These are operator checks after manual cutover, not outcomes proven by
-Terraform mocks or the fake-command tests:
+Terraform mocks or the fake-command tests. **Managed hairpin Linux live
+acceptance remains pending.** Collect command output, compiled Proxmox
+rules, counters, application logs and synchronized captures on the source/target
+VNets, exact firewall bridges and `hsp-he6` for the matrix below:
 
 | Check | Expected result |
 | --- | --- |
@@ -206,8 +283,27 @@ Terraform mocks or the fake-command tests:
 | Remove an active forward or TCP/UDP/ICMP egress grant | Only affected flows stop and cannot reconnect; unchanged other guests/protocols/inherited grants remain usable. |
 | Cleanup failure, firewall reload, guest/host reboot, and final off state | Failure retains a blocking guard; owned services reconcile after reboot; removal leaves IPv4 usable. |
 
+For hairpin acceptance, first inspect compiled `pve-firewall` rules to
+confirm native hairpin exceptions precede protected-range drops and exact
+source/MAC filters remain active. Choose an existing TCP forward, two explicitly
+granted clients and an ungranted client. Include both VM and LXC sources
+and targets. Retain unrelated external, internet and other-client sessions
+through reduction and reload checks.
+
+| Hairpin check | Required evidence / expected result |
+| --- | --- |
+| VM-to-LXC, LXC-to-VM and self-hairpin to `VIP:P` | Each granted connection succeeds; backend logs/capture show target gateway as source and client capture shows replies from `VIP:P`. No corresponding application packets appear on `hsp-he6`. |
+| Two clients bind the same fixed TCP source port concurrently, plus self-hairpin | All connections coexist; correlate each original source tuple with its translated tuple, including translated-port collisions resolved by the kernel. |
+| Exact conntrack views during each connection | `conntrack -L -f ipv6 -o extended` (select zones explicitly as needed) shows zone 0 original `SOURCE:client_port -> VIP:P`, reply `TARGET:P -> GATEWAY:translated_port`; zone 1 source-side `SOURCE:client_port -> VIP:P` and target-side `GATEWAY:translated_port -> TARGET:P`, with their replies. Match endpoint/port tuples to captures, including self-hairpin. |
+| Large transfers and related ICMPv6 errors from an intermediate router | No size-dependent stalls; authorized master tuples admit related errors even when the router is not either application endpoint. Unrelated errors/new ICMP gain no hairpin permission. |
+| Ungranted client, ungranted VIP port, direct target ULA, forged source, LAN/VPN-prefix source, and host GUI/SSH | All application attempts denied, including unmapped VIP ports and management via gateway addresses. Existing scoped NDP/DAD remains usable. |
+| Revoke active P, remap its forward, then revoke independent E on the same port | Affected sessions stop and cannot reconnect; revoking P retains E, external ingress and other-client/self sessions; revoking E retains P and unrelated TCP/UDP/ICMP sessions. Capture both bridge views to confirm exact cleanup. |
+| No-op service reload, firewall reload, additions and guest/host reboot | Reloads/additions preserve unrelated sessions; after reboot new authorized connections work and denied connections remain denied (host reboot destroys existing kernel sessions). |
+| Controlled cleanup failure and retry, including after zone-0 deletion | Blocking guard remains on failure; retained journal permits complete retry without broad target-port deletion or resetting other clients. Perform only in an operator-controlled test environment. |
+| External HE ingress plus baseline internet TCP/UDP/ICMP | External applications still see real client IPv6; permitted egress works with public-VIP SNAT and unlisted ports remain denied. IPv4 and local DNS behavior remain unchanged. |
+
 Before activation, syntax-check the staged rules transaction on Linux with
-`nft --check --file /etc/hsp-ipv6-ingress/rules.nft` on a disposable copy/
+`nft -c -f /etc/hsp-ipv6-ingress/rules.nft` on a disposable copy/
 namespace without an existing table of the same name. Inspect the actual
 loaded tables after service activation. A standalone rules file is not a
 safe replacement transaction for an already-loaded table; the helper

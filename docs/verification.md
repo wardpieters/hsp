@@ -43,3 +43,29 @@ The final native-only verification passed `make check`: ten configurations,
 247 native Terraform test runs and 26 Node tests. `make docs-build` and
 `git diff --check` also pass. The rejected policy-helper implementation and
 its tests are absent from this result.
+
+## Managed-guest IPv6 hairpin (2026-11-06)
+
+Implementation and offline verification are complete; Linux live acceptance
+is pending. The final runtime integration run recorded in Task 4 passed
+`make check`: ten validated configurations, 296 Terraform mock test runs
+and 36 Node tests. Task 5 changes only documentation/example/status files
+and reuses that unchanged-runtime evidence. Website tests and the production
+documentation build also pass; neither can prove hairpin traffic works.
+
+Coverage includes exact native firewall exception ordering, resolved
+cross/self grants, hairpin-only VM/LXC participation and final-grant removal,
+default/off compatibility, unchanged host-config resource content, exact
+DNAT/gateway-SNAT guard rendering, independent E/P revocation, both bridge
+views, translated-port collisions, durable retry after zone-0 deletion,
+malformed enumeration, no-op/addition preservation and failure guards.
+Provider pins, IPv4 behavior, effective internet inheritance, existing output
+shapes and IPv4-only local DNS ownership are unchanged.
+
+Mocks execute isolated fake networking tools and prove generated policy and
+lifecycle commands, not Linux nft syntax, legacy bridge/conntrack traversal
+or working traffic. Run the operator's expanded
+[IPv6 live acceptance matrix](ipv6.md#live-acceptance) separately, including
+`nft -c`, compiled Proxmox rules, exact zone-0/zone-1 tuples and packet
+captures. No Terraform apply, SSH, router/DNS change, live infrastructure
+operation or guest restart was performed for the documentation task.
