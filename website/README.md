@@ -4,14 +4,14 @@ This Docusaurus site reads the root `README.md`, `examples/README.md`, and the M
 
 ## Local development
 
-Install Node.js 22 or later and npm, then run from the repository root:
+Install Node.js 22.14 or later and npm, then run from the repository root:
 
 ```sh
 make docs-install
 make docs-start
 ```
 
-Open `http://localhost:3000`. Markdown edits reload automatically.
+Open `http://localhost:3000/hsp/`. Markdown edits reload automatically.
 
 To build and preview the production site:
 
@@ -35,8 +35,16 @@ Equivalent npm commands are `npm --prefix website ci`, `npm --prefix website sta
 - The design and plan for this website conversion are excluded from the published documentation.
 - Markdown files use CommonMark parsing so Terraform examples and historical planning placeholders do not need conversion to JSX.
 
-## Static hosting
+## Releases and GitHub Pages
 
-Serve `website/build/` with any static web server. Before publishing, set `url` in `website/docusaurus.config.js` to the real site origin. The checked-in `https://hsp.example.com` value is a placeholder. If hosting under a subdirectory, also set `baseUrl` to that path, including its leading and trailing slash, and rebuild.
+Every push to `main` runs `.github/workflows/release.yml`: install the locked dependencies, run the documentation and release-policy tests, build the site, create a version tag and GitHub release with semantic-release, then deploy the build to [the documentation website](https://wardpieters.github.io/hsp/). Failed tests or builds prevent both release and deployment. Pull requests continue to build through the validation workflow without publishing.
+
+In the repository's **Settings → Pages → Build and deployment**, select **GitHub Actions** as the source. The workflow uses the built-in `GITHUB_TOKEN` to create releases and GitHub's Pages artifact deployment with OIDC; no personal access token or `gh-pages` branch is needed.
+
+Release versions come from Git tags, starting at `v1.0.0` when there is no previous release. `feat:` commits produce a minor release; a `!` marker or `BREAKING CHANGE:` footer produces a major release. All other new commits produce a patch release, including documentation, maintenance, and commits without a Conventional Commits prefix. The highest applicable bump since the previous release wins. Use `npm --prefix website test` to verify these rules.
+
+The configuration publishes GitHub releases only. It does not publish an npm package or commit generated version changes back to `main`; `website/package.json` is the private documentation toolchain, not the released Terraform module version. semantic-release's standard `[skip release]` / `[release skip]` commit markers still opt individual commits out of release analysis.
+
+The production origin and `/hsp/` base path are configured in `website/docusaurus.config.js`. For another static host, update those settings and rebuild, then serve `website/build/` at the configured path.
 
 The documentation build does not load Terraform variables, `.env`, state, plans, or credentials. Review the documentation and its examples before choosing a hosting audience.

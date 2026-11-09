@@ -18,8 +18,10 @@ if (!/^[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?$/.test(hspDomain)) {
 const config = {
   title: 'Home self-hosting platform',
   tagline: 'Infrastructure, deployment, and access policies',
-  url: 'https://hsp.example.com',
-  baseUrl: '/',
+  url: 'https://wardpieters.github.io',
+  baseUrl: '/hsp/',
+  organizationName: 'wardpieters',
+  projectName: 'hsp',
   onBrokenLinks: 'throw',
   onBrokenAnchors: 'throw',
   markdown: {

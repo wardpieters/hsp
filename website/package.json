@@ -7,7 +7,8 @@
     "start": "docusaurus start --no-open",
     "build": "docusaurus build",
     "serve": "docusaurus serve --no-open",
-    "clear": "docusaurus clear"
+    "clear": "docusaurus clear",
+    "release": "semantic-release"
   },
   "dependencies": {
     "@docusaurus/core": "3.10.2",
@@ -16,6 +17,13 @@
     "react-dom": "19.2.0"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.14.0"
+  },
+  "devDependencies": {
+    "@semantic-release/commit-analyzer": "13.0.1",
+    "@semantic-release/github": "12.0.10",
+    "@semantic-release/release-notes-generator": "14.1.1",
+    "conventional-changelog-conventionalcommits": "9.3.1",
+    "semantic-release": "25.0.9"
   }
 }

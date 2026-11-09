@@ -23,4 +23,5 @@ jobs:
           cache: npm
           cache-dependency-path: website/package-lock.json
       - run: make docs-install
+      - run: npm --prefix website test
       - run: make docs-build
