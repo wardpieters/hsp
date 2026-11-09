@@ -12,12 +12,18 @@ table ip6 hsp_he_ingress {
 %{ endif ~}
   chain prerouting {
     type nat hook prerouting priority -101; policy accept;
+%{ for h in hairpin ~}
+    iifname "${h.source_vnet_id}" ip6 saddr ${h.source_address} ip6 daddr ${public} ${h.protocol} dport ${h.port} dnat to ${h.target_address}
+%{ endfor ~}
 %{ for f in forwards ~}
-    iifname "hsp-he6" ip6 daddr ${public} tcp dport ${f.port} dnat to ${f.address}
+    iifname "hsp-he6" ip6 daddr ${public} ${f.protocol} dport ${f.port} dnat to ${f.address}
 %{ endfor ~}
   }
   chain postrouting {
     type nat hook postrouting priority 99; policy accept;
+%{ for h in hairpin ~}
+    oifname "${h.target_vnet_id}" ct direction original ct status dnat ct original ip6 saddr ${h.source_address} ct original ip6 daddr ${public} ct original protocol ${h.protocol == "tcp" ? 6 : 17} ct original proto-dst ${h.port} ct reply ip6 saddr ${h.target_address} ip6 saddr ${h.source_address} ip6 daddr ${h.target_address} ${h.protocol} dport ${h.port} snat to ${h.target_gateway}
+%{ endfor ~}
 %{ for e in egress ~}
     oifname "hsp-he6" ct direction original ip6 saddr ${e.address} meta l4proto ${e.number} %{ if e.port != null }${e.protocol} dport ${e.port} %{ endif }snat to ${public}
 %{ endfor ~}
@@ -40,17 +46,27 @@ table ip6 hsp_he_ingress {
     # A legitimate tunnel peer/router may itself be in a protected prefix.
     # Permit only errors belonging to currently authorized NAT tuples first.
 %{ for f in forwards ~}
-    ct state related meta l4proto ipv6-icmp icmpv6 type { 1, 2, 3, 4 } ct status dnat ct original ip6 daddr ${public} ct original protocol 6 ct original proto-dst ${f.port} ct reply ip6 saddr ${f.address} accept
+    iifname "hsp-he6" oifname "${f.vnet_id}" ct state related meta l4proto ipv6-icmp icmpv6 type { 1, 2, 3, 4 } ct status dnat ct original ip6 daddr ${public} ct original protocol ${f.protocol == "tcp" ? 6 : 17} ct original proto-dst ${f.port} ct reply ip6 saddr ${f.address} accept
+    iifname "${f.vnet_id}" oifname "hsp-he6" ct state related meta l4proto ipv6-icmp icmpv6 type { 1, 2, 3, 4 } ct status dnat ct original ip6 daddr ${public} ct original protocol ${f.protocol == "tcp" ? 6 : 17} ct original proto-dst ${f.port} ct reply ip6 saddr ${f.address} accept
 %{ endfor ~}
 %{ for e in egress ~}
     ct state related meta l4proto ipv6-icmp icmpv6 type { 1, 2, 3, 4 } ct status snat ct original ip6 saddr ${e.address} ct reply ip6 daddr ${public} ct original protocol ${e.number} %{ if e.port != null }ct original proto-dst ${e.port} %{ endif }accept
+%{ endfor ~}
+%{ for h in hairpin ~}
+    iifname "${h.source_vnet_id}" oifname "${h.target_vnet_id}" ct state related meta l4proto ipv6-icmp icmpv6 type { 1, 2, 3, 4 } ct status dnat ct original ip6 saddr ${h.source_address} ct original ip6 daddr ${public} ct original protocol ${h.protocol == "tcp" ? 6 : 17} ct original proto-dst ${h.port} ct reply ip6 saddr ${h.target_address} accept
+    iifname "${h.target_vnet_id}" oifname "${h.source_vnet_id}" ct state related meta l4proto ipv6-icmp icmpv6 type { 1, 2, 3, 4 } ct status dnat ct original ip6 saddr ${h.source_address} ct original ip6 daddr ${public} ct original protocol ${h.protocol == "tcp" ? 6 : 17} ct original proto-dst ${h.port} ct reply ip6 saddr ${h.target_address} ct status snat ct reply ip6 daddr ${h.target_gateway} accept
 %{ endfor ~}
 %{ for c in protected ~}
     iifname "hsp-he6" ip6 saddr ${c} drop
     oifname "hsp-he6" ip6 daddr ${c} drop
 %{ endfor ~}
 %{ for f in forwards ~}
-    ct status dnat ct original ip6 daddr ${public} ct original protocol 6 ct original proto-dst ${f.port} ct reply ip6 saddr ${f.address} ct state { new, established, related } accept
+    iifname "hsp-he6" oifname "${f.vnet_id}" ct direction original ct status dnat ct original ip6 daddr ${public} ct original protocol ${f.protocol == "tcp" ? 6 : 17} ct original proto-dst ${f.port} ct reply ip6 saddr ${f.address} ip6 daddr ${f.address} ${f.protocol} dport ${f.port} ct state { new, established } accept
+    iifname "${f.vnet_id}" oifname "hsp-he6" ct direction reply ct status dnat ct original ip6 daddr ${public} ct original protocol ${f.protocol == "tcp" ? 6 : 17} ct original proto-dst ${f.port} ct reply ip6 saddr ${f.address} ip6 saddr ${f.address} ${f.protocol} sport ${f.port} ct state established accept
+%{ endfor ~}
+%{ for h in hairpin ~}
+    iifname "${h.source_vnet_id}" oifname "${h.target_vnet_id}" ct direction original ct status dnat ct original ip6 saddr ${h.source_address} ct original ip6 daddr ${public} ct original protocol ${h.protocol == "tcp" ? 6 : 17} ct original proto-dst ${h.port} ct reply ip6 saddr ${h.target_address} ip6 saddr ${h.source_address} ip6 daddr ${h.target_address} ${h.protocol} dport ${h.port} ct state { new, established } accept
+    iifname "${h.target_vnet_id}" oifname "${h.source_vnet_id}" ct direction reply ct status dnat ct original ip6 saddr ${h.source_address} ct original ip6 daddr ${public} ct original protocol ${h.protocol == "tcp" ? 6 : 17} ct original proto-dst ${h.port} ct reply ip6 saddr ${h.target_address} ct status snat ct reply ip6 daddr ${h.target_gateway} ip6 saddr ${h.target_address} ip6 daddr ${h.source_address} ${h.protocol} sport ${h.port} ct state established accept
 %{ endfor ~}
 %{ for e in egress ~}
     iifname "${e.vnet_id}" oifname "hsp-he6" ct direction original ip6 saddr ${e.address} meta l4proto ${e.number} %{ if e.port != null }${e.protocol} dport ${e.port} %{ endif }ct state { new, established, related } accept

@@ -6,7 +6,8 @@ locals {
     port    = p.port
   }]])
   permissions = join("\n", concat(["H|${var.public_address}|${var.ula_prefix}"], sort(distinct(concat(
-    [for f in values(var.forwards) : "D|${var.public_address}|${f.address}|tcp|${f.port}|${f.vnet_id}"],
+    [for f in values(var.forwards) : "D|${var.public_address}|${f.address}|${f.protocol}|${f.port}|${f.vnet_id}"],
+    [for h in values(var.hairpin) : "P|${var.public_address}|${h.source_address}|${h.protocol}|${h.port}|${h.source_vnet_id}|${h.target_address}|${h.target_vnet_id}|${h.target_gateway}"],
     [for e in local.egress_rules : "E|${var.public_address}|${e.address}|${e.protocol}|${e.port == null ? "none" : tostring(e.port)}|${e.vnet_id}"]
   )))))
 }
@@ -19,8 +20,8 @@ resource "system_folder" "config" {
 resource "system_file" "ingress_rules" {
   path = "${system_folder.config.path}/rules.nft"
   content = templatefile("${path.module}/templates/ingress.nft.tftpl", {
-    public = var.public_address, ula = var.ula_prefix, forwards = var.forwards,
-    egress = local.egress_rules, protected = local.protected, firewall_bridges = var.firewall_bridges
+    public  = var.public_address, ula = var.ula_prefix, forwards = var.forwards,
+    hairpin = var.hairpin, egress = local.egress_rules, protected = local.protected, firewall_bridges = var.firewall_bridges
   })
   uid  = 0
   gid  = 0
