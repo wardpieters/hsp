@@ -24,7 +24,7 @@ run "vm_ipv6_and_egress" {
   command = plan
   variables {
     network               = { address = "10.77.0.2", gateway = "10.77.0.1", cidr = "10.77.0.0/30", vnet_id = "hsp100", ipv6 = { cidr = "fd42:77:1::/64", gateway = "fd42:77:1::1", address = "fd42:77:1::2" } }
-    ipv6_forwarded_ports  = [443]
+    ipv6_forwarded_ports  = [{ protocol = "tcp", port = 443 }]
     protected_ipv6_cidrs  = ["2001:db8:1::/64"]
     internet_egress_ports = [{ protocol = "tcp", port = 443 }, { protocol = "udp", port = 123 }, { protocol = "icmp" }]
   }
@@ -62,7 +62,7 @@ run "inbound_only_no_internet" {
   command = plan
   variables {
     network              = { address = "10.77.0.2", gateway = "10.77.0.1", cidr = "10.77.0.0/30", vnet_id = "hsp100", ipv6 = { cidr = "fd42:77:1::/64", gateway = "fd42:77:1::1", address = "fd42:77:1::2" } }
-    ipv6_forwarded_ports = [443]
+    ipv6_forwarded_ports = [{ protocol = "tcp", port = 443 }]
   }
   assert {
     condition     = length([for r in output.rules : r if r.type == "out" && r.action == "ACCEPT" && r.dest == "::/0"]) == 0 && length([for r in output.rules : r if r.comment == "hsp:ipv6:public:tcp:443"]) == 1
@@ -71,7 +71,7 @@ run "inbound_only_no_internet" {
 }
 run "reject_unlisted_forward" {
   command = plan
-  variables { ipv6_forwarded_ports = [25] }
+  variables { ipv6_forwarded_ports = [{ protocol = "tcp", port = 25 }] }
   expect_failures = [var.ipv6_forwarded_ports]
 }
 run "reject_ipv6_wrong_offsets" {

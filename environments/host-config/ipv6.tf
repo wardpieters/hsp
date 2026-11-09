@@ -11,16 +11,7 @@ variable "he_ipv6" {
     ula_prefix      = optional(string)
     mtu             = optional(number, 1480)
     protected_cidrs = optional(list(string), [])
-    hairpin         = optional(map(set(string)), {})
-    port_forwards   = optional(map(object({ guest = string, port = number })), {})
   })
-  validation {
-    condition = !var.he_ipv6.enabled || try(alltrue([for source, forwards in var.he_ipv6.hairpin :
-      can(regex("^[a-z][a-z0-9-]{0,62}$", source)) && length(forwards) > 0 &&
-      alltrue([for key in forwards : can(regex("^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$", key)) && contains(keys(var.he_ipv6.port_forwards), key)])
-    ]), false)
-    error_message = "Enabled HE hairpin requires valid source names and nonempty sets of valid existing forward keys."
-  }
   default  = {}
   nullable = false
   validation {
@@ -41,12 +32,8 @@ variable "he_ipv6" {
       cidrhost(var.he_ipv6.ula_prefix, 0) == split("/", var.he_ipv6.ula_prefix)[0] &&
       cidrhost("${split("/", var.he_ipv6.ula_prefix)[0]}/8", 0) == "fd00::" &&
       var.he_ipv6.mtu >= 1280 && var.he_ipv6.mtu <= 1480 && floor(var.he_ipv6.mtu) == var.he_ipv6.mtu &&
-      alltrue([for c in var.he_ipv6.protected_cidrs : strcontains(c, ":") && cidrhost(c, 0) == split("/", c)[0]]) &&
-      length(distinct([for f in values(var.he_ipv6.port_forwards) : f.port])) == length(var.he_ipv6.port_forwards) &&
-      alltrue([for f in values(var.he_ipv6.port_forwards) :
-        can(regex("^[a-z][a-z0-9-]{0,62}$", f.guest)) && f.port >= 1 && f.port <= 65535 && floor(f.port) == f.port && !contains([22, 8006], f.port)
-    ]), false)
-    error_message = "Enabled HE requires valid IPv4 endpoints, distinct global tunnel IPv6 endpoints in one /64, a separate canonical global routed /64, canonical fd00::/8 ULA /48, integer MTU 1280..1480, IPv6 protected CIDRs and unique valid non-management TCP ports."
+    alltrue([for c in var.he_ipv6.protected_cidrs : strcontains(c, ":") && cidrhost(c, 0) == split("/", c)[0]]), false)
+    error_message = "Enabled HE requires valid IPv4 endpoints, distinct global tunnel IPv6 endpoints in one /64, a separate canonical global routed /64, canonical fd00::/8 ULA /48, integer MTU 1280..1480, IPv6 protected CIDRs."
   }
 
 }

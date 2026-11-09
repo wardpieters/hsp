@@ -10,15 +10,7 @@ he_ipv6 = {
   routed_prefix = "2001:db8:2::/64"
   ula_prefix    = "fd42:77:1::/48" # Choose a unique, stable ULA /48 for your site.
   mtu           = 1480
-  port_forwards = {
-    http  = { guest = "proxy-public", port = 80 }
-    https = { guest = "proxy-public", port = 443 }
-  }
-  hairpin = {} # Opt in only named managed guests to existing TCP forward keys.
-  # Example opt-in (replace the empty map above; guest names must exist):
-  # hairpin = {
-  #   monitoring   = ["https"]
-  #   proxy-public = ["https"] # Self-hairpin.
-  # }
+  # Public TCP/UDP forwards derive from guests.public_ports.
+  # Hairpin requires matching effective internet egress or an explicit guest connection.
   # Outgoing IPv6 inherits effective global/per-guest/role internet_egress_ports.
 }

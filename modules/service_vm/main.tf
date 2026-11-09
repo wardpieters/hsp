@@ -24,15 +24,15 @@ variable "proxmox_ssh" {
 }
 variable "network" { type = object({ address = string, gateway = string, cidr = string, vnet_id = string, ipv6 = optional(object({ cidr = string, gateway = string, address = string })) }) }
 variable "ipv6_hairpin_out" {
-  type    = list(object({ public_address = string, port = number }))
+  type    = list(object({ public_address = string, protocol = optional(string, "tcp"), port = number }))
   default = []
 }
 variable "ipv6_hairpin_in" {
-  type    = list(object({ gateway = string, port = number }))
+  type    = list(object({ gateway = string, protocol = optional(string, "tcp"), port = number }))
   default = []
 }
 variable "ipv6_forwarded_ports" {
-  type    = list(number)
+  type    = list(object({ protocol = string, port = number }))
   default = []
 }
 variable "protected_ipv6_cidrs" {

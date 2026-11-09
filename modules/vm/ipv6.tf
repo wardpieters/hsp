@@ -1,36 +1,36 @@
 variable "ipv6_hairpin_out" {
-  type    = list(object({ public_address = string, port = number }))
+  type    = list(object({ public_address = string, protocol = optional(string, "tcp"), port = number }))
   default = []
   validation {
     condition = alltrue([for grant in var.ipv6_hairpin_out : try(
       var.network.ipv6 != null &&
       cidrhost("${grant.public_address}/128", 0) == grant.public_address &&
       cidrhost("${grant.public_address}/3", 0) == "2000::" &&
-      grant.port == floor(grant.port) && grant.port >= 1 && grant.port <= 65535,
+      contains(["tcp", "udp"], grant.protocol) && grant.port == floor(grant.port) && grant.port >= 1 && grant.port <= 65535,
       false
     )])
     error_message = "Outgoing IPv6 hairpin grants require IPv6 networking, canonical global host addresses and integer ports 1..65535."
   }
 }
 variable "ipv6_hairpin_in" {
-  type    = list(object({ gateway = string, port = number }))
+  type    = list(object({ gateway = string, protocol = optional(string, "tcp"), port = number }))
   default = []
   validation {
     condition = alltrue([for grant in var.ipv6_hairpin_in : try(
       grant.gateway == var.network.ipv6.gateway &&
-      grant.port == floor(grant.port) && grant.port >= 1 && grant.port <= 65535 &&
-      contains(var.ipv6_forwarded_ports, grant.port),
+      contains(["tcp", "udp"], grant.protocol) && grant.port == floor(grant.port) && grant.port >= 1 && grant.port <= 65535 &&
+      contains(var.ipv6_forwarded_ports, { protocol = grant.protocol, port = grant.port }),
       false
     )])
     error_message = "Incoming IPv6 hairpin grants require the configured IPv6 gateway and an integer forwarded port 1..65535."
   }
 }
 variable "ipv6_forwarded_ports" {
-  type    = list(number)
+  type    = list(object({ protocol = string, port = number }))
   default = []
   validation {
-    condition     = alltrue([for port in var.ipv6_forwarded_ports : contains([for p in var.public_ports : p.port if p.protocol == "tcp"], port)])
-    error_message = "IPv6 forwarded ports must already be declared TCP public_ports."
+    condition     = alltrue([for p in var.ipv6_forwarded_ports : contains(var.public_ports, p)])
+    error_message = "IPv6 forwarded ports must already be declared TCP/UDP public_ports."
   }
 }
 variable "protected_ipv6_cidrs" {
@@ -70,18 +70,18 @@ locals {
     })]]),
     [for grant in distinct(var.ipv6_hairpin_out) : merge(local.base_rule, {
       type  = "out", source = "${var.network.ipv6.address}/128", dest = "${grant.public_address}/128",
-      proto = "tcp", dport = tostring(grant.port), comment = "hsp:ipv6:hairpin-out:${grant.port}"
+      proto = grant.protocol, dport = tostring(grant.port), comment = "hsp:ipv6:hairpin-out:${grant.protocol == "tcp" ? "" : "udp:"}${grant.port}"
     })],
     [for grant in distinct(var.ipv6_hairpin_in) : merge(local.base_rule, {
       source = "${grant.gateway}/128", dest = "${var.network.ipv6.address}/128",
-      proto  = "tcp", dport = tostring(grant.port), comment = "hsp:ipv6:hairpin-in:${grant.port}"
+      proto  = grant.protocol, dport = tostring(grant.port), comment = "hsp:ipv6:hairpin-in:${grant.protocol == "tcp" ? "" : "udp:"}${grant.port}"
     })],
     flatten([for c in local.ipv6_protected : [
       merge(local.base_rule, { action = "DROP", source = c, comment = "hsp:ipv6:protect-in:${c}" }),
       merge(local.base_rule, { type = "out", action = "DROP", dest = c, comment = "hsp:ipv6:protect-out:${c}" })
     ]]),
-    [for port in distinct(var.ipv6_forwarded_ports) : merge(local.base_rule, {
-      source = "::/0", proto = "tcp", dport = tostring(port), comment = "hsp:ipv6:public:tcp:${port}"
+    [for p in distinct(var.ipv6_forwarded_ports) : merge(local.base_rule, {
+      source = "::/0", proto = p.protocol, dport = tostring(p.port), comment = "hsp:ipv6:public:${p.protocol}:${p.port}"
     })],
     [for p in var.internet_egress_ports : merge(local.base_rule, {
       type    = "out", dest = "::/0", proto = p.protocol == "icmp" ? "ipv6-icmp" : p.protocol,
