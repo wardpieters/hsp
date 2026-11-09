@@ -15,3 +15,10 @@ variable "settings" {
   })
   nullable = false
 }
+
+variable "require_api_endpoints" {
+  description = "Require explicit HTTPS API endpoints when the caller configures Proxmox and Pi-hole providers."
+  type        = bool
+  default     = false
+  nullable    = false
+}

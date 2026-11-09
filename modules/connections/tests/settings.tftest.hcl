@@ -58,3 +58,24 @@ run "reject_fragment" {
   variables { settings = { platform_cidr = "10.77.0.0/24", pihole_url = "https://192.0.2.53/#fixture" } }
   expect_failures = [output.settings]
 }
+
+run "required_endpoints_cannot_fall_back_to_provider_environment" {
+  command = plan
+  variables { require_api_endpoints = true }
+  expect_failures = [output.settings]
+}
+run "required_endpoints_reject_explicit_null" {
+  command = plan
+  variables {
+    require_api_endpoints = true
+    settings              = { platform_cidr = "10.77.0.0/24", proxmox_endpoint = "https://192.0.2.10:8006", pihole_url = null }
+  }
+  expect_failures = [output.settings]
+}
+run "required_endpoints_accept_https_pair" {
+  command = plan
+  variables {
+    require_api_endpoints = true
+    settings              = { platform_cidr = "10.77.0.0/24", proxmox_endpoint = "https://192.0.2.10:8006", pihole_url = "https://192.0.2.53" }
+  }
+}
