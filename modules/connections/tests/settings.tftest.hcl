@@ -4,7 +4,7 @@ variables {
 run "optional_connections_default_without_provider_configuration" {
   command = plan
   assert {
-    condition = output.settings.proxmox_ssh == null && output.settings.proxmox_insecure_tls == false && output.settings.pihole_insecure_tls == false
+    condition     = output.settings.proxmox_ssh == null && output.settings.proxmox_insecure_tls == false && output.settings.pihole_insecure_tls == false
     error_message = "Omitted connection settings must retain their defaults."
   }
 }
@@ -14,7 +14,7 @@ run "ssh_defaults_and_nulls" {
     settings = { platform_cidr = "10.77.0.0/24", proxmox_ssh = { host = "192.0.2.10", user = "root", port = null }, proxmox_insecure_tls = null }
   }
   assert {
-    condition = output.settings.proxmox_ssh.port == 22 && output.settings.proxmox_ssh.host_key == null && output.settings.proxmox_insecure_tls == false
+    condition     = output.settings.proxmox_ssh.port == 22 && output.settings.proxmox_ssh.host_key == null && output.settings.proxmox_insecure_tls == false
     error_message = "SSH and TLS defaults must survive omitted and explicit-null fields."
   }
 }
@@ -24,7 +24,7 @@ run "custom_ssh_and_https_endpoints" {
     settings = { platform_cidr = "10.77.0.0/24", proxmox_endpoint = "https://192.0.2.10:8006/", pihole_url = "https://192.0.2.53", proxmox_ssh = { host = "192.0.2.10", user = "admin", port = 2222, host_key = "fixture-key" } }
   }
   assert {
-    condition = output.settings.proxmox_ssh.port == 2222 && output.settings.proxmox_ssh.host_key == "fixture-key" && output.settings.proxmox_endpoint == "https://192.0.2.10:8006/"
+    condition     = output.settings.proxmox_ssh.port == 2222 && output.settings.proxmox_ssh.host_key == "fixture-key" && output.settings.proxmox_endpoint == "https://192.0.2.10:8006/"
     error_message = "Connection settings must reach the provider boundary unchanged."
   }
 }
