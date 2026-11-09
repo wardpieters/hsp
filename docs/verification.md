@@ -69,3 +69,35 @@ or working traffic. Run the operator's expanded
 `nft -c`, compiled Proxmox rules, exact zone-0/zone-1 tuples and packet
 captures. No Terraform apply, SSH, router/DNS change, live infrastructure
 operation or guest restart was performed for the documentation task.
+
+
+## Automatic TCP/UDP IPv6 forwarding (2026-11-09)
+
+Public IPv6 forwards derive from guest `public_ports`; shared HE settings
+contain no forwarding or hairpin maps. The original implementation granted
+all managed guests access; the source-permission correction below supersedes
+that authorization policy.
+Offline `make check` passed: ten configurations validated, 283 Terraform test
+runs and 51 Node tests. Three website document tests also passed. Independent
+review found no actionable issues.
+
+Coverage includes TCP/UDP ownership conflicts, same-number different-protocol
+targets, deduplicated declarations, guests without internet egress, self
+hairpin, empty/off configurations, protocol-specific native policy, UDP
+revocation/remapping, source port zero, both bridge views, failure retries,
+and legacy TCP cleanup journals. Linux live acceptance remains pending;
+no infrastructure apply or guest restart was performed.
+
+
+### Source-permission correction (2026-11-09)
+
+Hairpin now requires matching effective source internet egress OR an explicit
+source-to-resolved-target connection with the same protocol and port. Public
+listener declarations alone grant no client access. Regression tests reproduce
+TCP 587 egress incorrectly permitting VIP TCP 80 and verify its denial, exact
+TCP/UDP and direction/target matching, connection-only LXC participation,
+self-hairpin authorization, inherited egress and participant slot limits.
+`make check` passed ten configuration validations, 287 Terraform tests and
+51 Node tests; three website tests and diff/formatting checks also passed.
+Independent review found no actionable issues. Live Proxmox behavior still
+requires applying the reviewed home plan; no live apply was performed here.
