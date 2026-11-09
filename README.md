@@ -30,7 +30,7 @@ For example, the platform inventory can be as small as:
 
 ```hcl
 module "hsp" {
-  source = "git::https://github.com/wardpieters/hsp.git//modules/hsp?ref=v1.0.0"
+  source = "git::https://github.com/wardpieters/hsp.git//modules/hsp?ref=v1.0.1"
   providers = {
     proxmox        = proxmox
     pihole         = pihole

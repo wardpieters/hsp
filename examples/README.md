@@ -28,11 +28,11 @@ paths in `home/main.tf` and `host-config/main.tf` with these published pins:
 
 ```hcl
 # connections (used by both roots)
-source = "git::https://github.com/wardpieters/hsp.git//modules/connections?ref=v1.0.0"
+source = "git::https://github.com/wardpieters/hsp.git//modules/connections?ref=v1.0.1"
 # hsp (home root)
-source = "git::https://github.com/wardpieters/hsp.git//modules/hsp?ref=v1.0.0"
+source = "git::https://github.com/wardpieters/hsp.git//modules/hsp?ref=v1.0.1"
 # proxmox_host (host-config root)
-source = "git::https://github.com/wardpieters/hsp.git//modules/proxmox_host?ref=v1.0.0"
+source = "git::https://github.com/wardpieters/hsp.git//modules/proxmox_host?ref=v1.0.1"
 ```
 
 Keep the module blocks and provider mappings; only replace their `source` values.
