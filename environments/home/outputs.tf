@@ -1,54 +1,49 @@
 output "guests" {
-  value = { for name, g in module.service : name => {
-    vm_id = g.vm_id, type = g.type, address = g.address, names = g.names, started = var.guests[name].started
-  } }
+  value = module.hsp.guests
 }
+
 output "router_route" {
-  value = { destination = var.platform_cidr, next_hop = var.host_address }
+  value = module.hsp.router_route
 }
+
 output "public_forwards" {
-  value = flatten([for name, g in var.guests : [for p in g.public_ports : {
-    guest = name, address = module.network.networks[name].address, protocol = p.protocol, port = p.port
-  }]])
+  value = module.hsp.public_forwards
 }
+
 output "host_policy" {
-  value     = local.host_rules
+  value     = module.hsp.host_policy
   sensitive = true
 }
+
 output "policies" {
-  value     = { for name, service in module.service : name => service.rules }
+  value     = module.hsp.policies
   sensitive = true
 }
+
 output "dns_targets" {
-  value = { for d in local.dns_entries : d.name => d.mode == "proxy" ? d.proxy_address : module.network.networks[d.guest].address if d.mode != "none" }
+  value = module.hsp.dns_targets
 }
+
 output "ipv6_ingress" {
-  value = var.he_ipv6.enabled ? { public_address = local.he_ipv6_public_address, routed_prefix = var.he_ipv6.routed_prefix, ula_prefix = var.he_ipv6.ula_prefix } : null
+  value = module.hsp.ipv6_ingress
 }
-output "ipv6_networks" { value = local.he_ipv6_networks }
+
+output "ipv6_networks" {
+  value = module.hsp.ipv6_networks
+}
+
 output "ipv6_port_forwards" {
-  value = { for key, f in local.he_ipv6_forwards : key => {
-    public_address = local.he_ipv6_public_address, protocol = f.protocol, port = f.port,
-    guest          = f.guest, target_address = f.address, vnet_id = f.vnet_id
-  } }
+  value = module.hsp.ipv6_port_forwards
 }
+
 output "ipv6_egress" {
-  value = { for name, e in local.he_ipv6_egress : name => {
-    public_address = local.he_ipv6_public_address, source_address = e.address, vnet_id = e.vnet_id, ports = e.ports
-  } }
+  value = module.hsp.ipv6_egress
 }
+
 output "ipv6_host_requirements" {
-  value = [for r in local.he_host_allow_rules : {
-    purpose  = r.comment, direction = r.type, iface = r.iface, source = r.source, destination = r.dest,
-    protocol = r.proto, icmp_type = r.proto == "icmpv6" ? r.dport : null
-  }]
+  value = module.hsp.ipv6_host_requirements
 }
 
 output "ipv6_hairpin" {
-  value = { for key, h in local.he_ipv6_hairpin : key => {
-    source_guest              = h.source_guest, source_address = h.source_address, source_vnet_id = h.source_vnet_id,
-    forward_key               = h.forward_key, public_address = local.he_ipv6_public_address, protocol = h.protocol, port = h.port,
-    target_guest              = h.target_guest, target_address = h.target_address, target_vnet_id = h.target_vnet_id,
-    translated_source_address = h.target_gateway
-  } }
+  value = module.hsp.ipv6_hairpin
 }

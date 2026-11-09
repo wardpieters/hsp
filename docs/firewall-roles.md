@@ -180,7 +180,7 @@ terraform -chdir=environments/home output public_forwards
 
 `host_policy` is generated even when host firewall management is disabled; its presence does not prove that the policy was applied. Check effective rules and packet behavior on Proxmox during the [deployment acceptance checks](deployment.md#live-acceptance-and-removal).
 
-The source of truth is [role/dependency generation](../environments/home/policy.tf), [inventory validation](../environments/home/variables.tf), [shared guest rule generation](../modules/vm/policy.tf), and [firewall resource configuration](../modules/vm/main.tf).
+The source of truth is [role/dependency generation](../modules/hsp/policy.tf), [inventory validation](../modules/hsp/variables.tf), [shared guest rule generation](../modules/vm/policy.tf), and [firewall resource configuration](../modules/vm/main.tf).
 
 ## Optional IPv6 forwarding and egress
 

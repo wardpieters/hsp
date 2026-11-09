@@ -31,7 +31,10 @@ The `dns_records` module creates `cloud.{{HSP_DOMAIN}}` pointing to the declared
 | --- | --- |
 | `environments/home` | SDN, VMs and LXCs, firewalls, and per-guest Pi-hole DNS records |
 | `environments/host-config` | Persistent Proxmox host routing, using Terraform's SSH file/service provider |
-| `modules/` | Reusable network, guest, DNS, and host configuration modules |
+| `modules/hsp` | Reusable combined guest platform, configured by the calling root |
+| `modules/` | Supporting network, guest, DNS, and host configuration modules |
+
+Use [the platform module](https://github.com/wardpieters/hsp/tree/main/modules/hsp) from another Terraform project, or use `environments/home` as a complete example caller. Provider configuration stays in the calling root.
 
 Deploy using ordinary Terraform commands, after filling in the private variables and completing the prerequisites in the [deployment guide](docs/deployment.md):
 
