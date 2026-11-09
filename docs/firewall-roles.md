@@ -47,7 +47,7 @@ The protected ranges include the platform aggregate, `host_address/32`, all conf
 | `connections` | Connects two declared guests, a guest to an external bare IPv4 address, or an external IPv4 host to a guest. External sources accept a bare address or `/32` suffix; all external addresses must be outside `platform_cidr`. Guest pairs get outgoing/incoming rules; external destinations get only guest egress, and external sources get only guest ingress. Each exception is limited to its TCP/UDP destination port and precedes protected-network drops. Service VPN destination restrictions still apply. |
 | `bootstrap = true` | On that guest only, allows incoming TCP 22 from each IPv4 `/32` in `bootstrap_admin_cidrs`, before protected-source blocks. Available to every role and defaults to `false`. Set it back to `false` and apply after setup to remove the exception. Guest bootstrap works independently of `manage_host_firewall`. |
 | `public_ports` | Allows incoming TCP/UDP on each listed destination port from `0.0.0.0/0`, after protected-source blocks. There is no public source-IP allowlist. Ports 22 and 8006 are rejected for every role; `private_proxy` and `management` reject all public ports. Defaults to empty. |
-| `public_ports_lan_cidrs` | Top-level IPv4 subnet list in `home.tfvars`, default `[]`. These LAN sources may reach each guest's declared `public_ports` before protected-source drops. guests without public ports receive no exception. Subnets must be canonical, narrower than `/0`, and must not overlap `platform_cidr`. |
+| `public_ports_lan_cidrs` | Top-level IPv4 subnet list in the `module "hsp"` block in `home/main.tf`, default `[]`. These LAN sources may reach each guest's declared `public_ports` before protected-source drops. guests without public ports receive no exception. Subnets must be canonical, narrower than `/0`, and must not overlap `platform_cidr`. |
 | `service_access_cidrs` | Top-level IPv4 subnet list, default `[]`. Allows only incoming TCP 443 to the guest selected by `private_proxy_name`, before protected-source drops. Requires a declared `private_proxy` target. Sources must be canonical IPv4 CIDRs narrower than `/0`, outside `platform_cidr`. Does not grant LAN access to Squid, SSH, Proxmox management, or other guests. |
 | `internet_egress_ports` | The top-level list applies to every guest; each guest's list adds its own permissions. Lists are combined with role defaults (`monitoring` adds TCP 80/443), and duplicate entries removed. Both configured lists default to `[]`. Outgoing TCP/UDP is allowed only on the declared destination ports; `{ protocol = "icmp" }` allows portless IPv4 ICMP. Destinations must be outside protected ranges. Protected-network blocks precede these allowances. |
 | `http_proxy_name` | Optional top-level guest name, default `null`. Every other declared guest, including `service_vpn`, receives outgoing TCP 3128 to that guest, with matching ingress for each client's `/32`. New guests are included automatically. Configure the proxy guest's internet egress separately. |
@@ -56,7 +56,7 @@ Example VPN listener declarations use UDP 51820 and 51821; those ports are inven
 
 ### Access to existing servers during migration
 
-Add explicit IPv4 destinations to the existing top-level `connections` list in `home.tfvars`, for example:
+Add explicit IPv4 destinations to the existing top-level `connections` list in the `module "hsp"` block in `home/main.tf`, for example:
 
 ```hcl
 connections = [
@@ -85,7 +85,7 @@ This adds incoming TCP 443 on `cloud` from only `192.168.50.42/32`, before prote
 
 ### LAN access to public ports
 
-Set this once at the top level of `home.tfvars` to permit the chosen LAN subnets to reach all declared public services:
+Set this once at the top level of the `module "hsp"` block in `home/main.tf` to permit the chosen LAN subnets to reach all declared public services:
 
 ```hcl
 public_ports_lan_cidrs = ["192.168.100.0/24"]
@@ -97,10 +97,10 @@ The EdgeRouter's aggregate route provides direct guest-IP reachability. Access t
 
 ### LAN access to private services
 
-Set this at the top level of `home.tfvars` to let your LAN use the private reverse proxy directly:
+Set this at the top level of the `module "hsp"` block in `home/main.tf` to let your LAN use the private reverse proxy directly:
 
 ```hcl
-private_proxy_name   = "proxy-private"
+private_proxy_name   = "proxy"
 service_access_cidrs = ["192.168.100.0/24"]
 ```
 
@@ -110,7 +110,7 @@ The existing EdgeRouter aggregate route provides reachability; no router VLAN co
 
 ### Outbound internet ports
 
-Set top-level `internet_egress_ports` in `home.tfvars` for permissions shared by every guest. Each guest's `internet_egress_ports` adds permissions for that guest. An empty guest list still inherits the global list. For example, add HTTPS and ICMP for one guest by setting this inside its entry:
+Set top-level `internet_egress_ports` in the `module "hsp"` block in `home/main.tf` for permissions shared by every guest. Each guest's `internet_egress_ports` adds permissions for that guest. An empty guest list still inherits the global list. For example, add HTTPS and ICMP for one guest by setting this inside its entry:
 
 ```hcl
 internet_egress_ports = [
@@ -125,7 +125,7 @@ With both lists empty, replies to permitted inbound connections, approved DNS/NT
 
 ### NTP pools
 
-For Debian's NTP pool, allow UDP destination port 123 globally instead of pinning pool server IPs. Pool DNS answers change over time; see the [NTP Pool usage guide](https://www.ntppool.org/en/use.html). Set these top-level values in `home.tfvars`:
+For Debian's NTP pool, allow UDP destination port 123 globally instead of pinning pool server IPs. Pool DNS answers change over time; see the [NTP Pool usage guide](https://www.ntppool.org/en/use.html). Set these top-level values in the `module "hsp"` block in `home/main.tf`:
 
 ```hcl
 ntp_servers = []
@@ -138,13 +138,13 @@ internet_egress_ports = [
 
 ### Shared HTTP forward proxy
 
-Set the top-level `http_proxy_name = "http-proxy"` to select a declared guest. The inventory example gives that guest guest ID 1006, slot 6 (`10.77.0.26`), a direct `http-proxy.{{HSP_DOMAIN}}` DNS record, and its own outbound TCP 80/443 allowance. Its `public_ports` is empty. All guests inherit global UDP 123 for NTP; other guests have empty per-guest egress lists and can use `http://http-proxy.{{HSP_DOMAIN}}:3128` for web requests after Squid and their proxy settings are configured.
+The minimal starter does not include a forward proxy. To add one, declare an `http-proxy` guest with a direct DNS alias and outbound TCP 80/443, then set `http_proxy_name = "http-proxy"` in the HSP module call. Other guests can use `http://http-proxy.{{HSP_DOMAIN}}:3128` after Squid and their proxy settings are configured. Add UDP 123 explicitly if those guests use internet NTP pools.
 
 This grants proxied web access to all declared guests, including the family VPN guest. Squid must listen on TCP 3128 and apply appropriate client and destination ACLs. Terraform provisions the guest and firewall/DNS rules; install Squid and configure proxy use inside clients separately. Access to the proxy is explicit HTTP proxying, rather than automatic redirection of all guest traffic. Proxmox blocks the proxy's connections to protected destinations except declared dependencies and narrow infrastructure exceptions. An IP dependency from `http-proxy` also allows Squid to relay matching requests for its clients, subject to its ACLs.
 
 For client configuration, follow [Debian guest setup](debian-setup.md) for login environment variables, APT downloads, and Docker Engine proxy and logging settings.
 
-DNS target selection and firewall dependencies are configured separately. For example, pointing `web.{{HSP_DOMAIN}}` at `proxy-private` also requires an appropriate `proxy-private` → `web` backend connection and a corresponding proxy route. A DNS alias alone adds no firewall exception.
+DNS target selection and firewall dependencies are configured separately. For example, pointing `app.{{HSP_DOMAIN}}` at `proxy` also requires an appropriate `proxy` → `app` backend connection and a corresponding proxy route. A DNS alias alone adds no firewall exception.
 
 ## Guest rule order
 
@@ -173,9 +173,9 @@ For the initial VPN model, clients use SNAT to the respective VPN gateway guest'
 The full `policies` and `host_policy` outputs are marked sensitive so Terraform collapses them in automatic plan/apply output. After applying, request an output by name to display its contents explicitly:
 
 ```sh
-terraform -chdir=environments/home output policies
-terraform -chdir=environments/home output host_policy
-terraform -chdir=environments/home output public_forwards
+terraform -chdir=home output policies
+terraform -chdir=home output host_policy
+terraform -chdir=home output public_forwards
 ```
 
 `host_policy` is generated even when host firewall management is disabled; its presence does not prove that the policy was applied. Check effective rules and packet behavior on Proxmox during the [deployment acceptance checks](deployment.md#live-acceptance-and-removal).

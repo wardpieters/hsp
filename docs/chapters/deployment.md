@@ -10,7 +10,7 @@ The [deployment guide](../deployment.md) describes the full Terraform workflow. 
 ## Chapter index
 
 1. [Prerequisites](../deployment.md#prerequisites) — inventory, templates, credentials, backups, and host access.
-2. [Configure and initialize](../deployment.md#configure-and-initialize) — private variables, provider initialization, local checks, and initial guest settings.
+2. [Configure and initialize](../deployment.md#configure-and-initialize) — shared settings, provider initialization, local checks, and initial guest settings.
 3. [Extra VM disks](../deployment.md#extra-vm-disks) — data disks, storage overrides, backups, and mounting inside the guest.
 4. [LXC guests and storage](../deployment.md#lxc-guests-and-storage) — templates, mount volumes, backups, nesting, SSH, and migration.
 5. [Apply Proxmox host routing](../deployment.md#apply-proxmox-host-routing) — forwarding, aggregate routes, and startup ordering.

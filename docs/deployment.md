@@ -2,13 +2,13 @@
 
 The [role and firewall reference](firewall-roles.md) lists all guest roles, automatic permissions, shared rules, and the effects of `public_ports`, `connections`, and `internet_egress_ports`.
 
-VM guests accept `backup` in `home.tfvars`, defaulting to `true`. Set `backup = false` inside a VM's entry to exclude its managed `scsi0` disk from Proxmox backups. Extra VM disks each have their own `backup` flag, defaulting to `true` independently of the root disk. LXC root filesystems follow backup-job selection and reject the guest-level flag when false; extra mount volumes have their own backup flags. Backup-job schedules and any separate configuration-only backups are managed outside this configuration.
+VM guests accept `backup` in `home/main.tf`, defaulting to `true`. Set `backup = false` inside a VM's entry to exclude its managed `scsi0` disk from Proxmox backups. Extra VM disks each have their own `backup` flag, defaulting to `true` independently of the root disk. LXC root filesystems follow backup-job selection and reject the guest-level flag when false; extra mount volumes have their own backup flags. Backup-job schedules and any separate configuration-only backups are managed outside this configuration.
 
-Top-level `internet_egress_ports` applies to every VM and LXC and is combined with each guest's own list; both default to `[]`. Declare shared TCP/UDP destination ports or portless `{ protocol = "icmp" }` entries globally and add guest-specific permissions inside guest entries. ICMP allows IPv4 traffic outside protected networks, including ping. The example allows global UDP 123 for Debian NTP pools and uses `ntp_servers = []` to remove fixed-IP NTP exceptions. Replace the former `allow_updates` flag with explicit egress entries. Approved DNS/NTP, declared dependencies, and replies to permitted inbound connections remain available independently. See the [outbound port examples](firewall-roles.md#outbound-internet-ports).
+Top-level `internet_egress_ports` applies to every VM and LXC and is combined with each guest's own list; both default to `[]`. Declare shared TCP/UDP destination ports or portless `{ protocol = "icmp" }` entries globally and add guest-specific permissions inside guest entries. ICMP allows IPv4 traffic outside protected networks, including ping. The minimal starter permits no general internet egress and uses `ntp_servers = []`. Add global UDP 123 explicitly if guests use Debian NTP pools. Replace the former `allow_updates` flag with explicit egress entries. Approved DNS/NTP, declared dependencies, and replies to permitted inbound connections remain available independently. See the [outbound port examples](firewall-roles.md#outbound-internet-ports).
 
-The optional top-level `http_proxy_name` selects a shared HTTP forward proxy. The example's `http-proxy` VM has outbound TCP 80/443, and every other declared VM receives TCP 3128 access to it. Install Squid after provisioning and configure clients to use its proxy URL; see the [shared proxy reference](firewall-roles.md#shared-http-forward-proxy).
+The optional top-level `http_proxy_name` selects a shared HTTP forward proxy. To add this optional setup, declare an `http-proxy` guest with outbound TCP 80/443 and select it with `http_proxy_name`; every other guest then receives TCP 3128 access to it. The minimal starter does not include this guest. Install Squid after provisioning and configure clients to use its proxy URL; see the [shared proxy reference](firewall-roles.md#shared-http-forward-proxy).
 
-After starting a Debian guest, follow [Debian guest setup](debian-setup.md) to configure the login environment, APT, and Docker Engine to use the shared proxy, including Docker log rotation and access checks.
+If you add the shared HTTP proxy, follow [Debian guest setup](debian-setup.md) to configure the login environment, APT, and Docker Engine to use the shared proxy, including Docker log rotation and access checks.
 
 Set top-level `service_access_cidrs` to trusted LAN subnets for direct HTTPS access to the guest selected by `private_proxy_name`. It defaults to `[]` and grants only TCP 443 to that private proxy. Squid and management access are separate; see [LAN access to private services](firewall-roles.md#lan-access-to-private-services).
 
@@ -20,26 +20,36 @@ Prepare a trusted cloud-init QEMU template with one NIC, a `scsi0` root disk no 
 
 Back up Proxmox network/SDN/firewall configuration and Pi-hole configuration. Preserve Proxmox console access during the rollout. Terraform does not automatically adopt existing guests, firewall lists, or DNS records: inspect and import them using the pinned provider's supported IDs before claiming ownership.
 
-Use HTTPS endpoints, a dedicated Proxmox API identity, and authorized Pi-hole config-write credentials. Certificate verification defaults to enabled for both APIs. Set `proxmox_insecure_tls = true` or `pihole_insecure_tls = true` in `home.tfvars` to skip verification for the corresponding API. Pi-hole application credentials may require `app_sudo`; review the needed permission explicitly. Supply secrets through your secret manager or shell session:
+Use HTTPS endpoints, a dedicated Proxmox API identity, and authorized Pi-hole config-write credentials. Certificate verification defaults to enabled for both APIs. Set `"proxmox_insecure_tls": true` or `"pihole_insecure_tls": true` in `settings.json` to skip verification for the corresponding API. Pi-hole application credentials may require `app_sudo`; review the needed permission explicitly. Supply secrets through your secret manager or shell session:
 
 - `TF_VAR_proxmox_api_token`: the shared `user@realm!tokenid=secret` credential for the Proxmox and REST providers. This input is sensitive and ephemeral (Terraform >=1.10), so its value is excluded from resource state and saved plans. The identity and token need `VM.Allocate` on managed LXCs for nesting updates, in addition to their existing guest-management permissions.
 - `TF_VAR_pihole_password`: the Pi-hole API credential.
 
-If your shell setup already exports `PROXMOX_VE_API_TOKEN`, reuse that token with `export TF_VAR_proxmox_api_token="$PROXMOX_VE_API_TOKEN"`. Both providers then use the same credential. Keep this mapping in your existing environment/secret-loading setup; do not add the token to tfvars. Run `make init` after updating to install the additional pinned REST provider.
+If your shell setup already exports `PROXMOX_VE_API_TOKEN`, reuse that token with `export TF_VAR_proxmox_api_token="$PROXMOX_VE_API_TOKEN"`. Both providers then use the same credential. Keep this mapping in your existing environment/secret-loading setup; do not add the token to tfvars. Run `terraform -chdir=home init` after changing the provider requirements.
 
-Proxmox host routing uses SSH agent authentication and elevated file/service access. Root logins run commands directly; other users require installed, passwordless `sudo`. SSH host-key verification is disabled. Pi-hole DNS uses only its API; no Pi-hole SSH credentials or host files are required.
+Proxmox host routing uses SSH agent authentication and elevated file/service access. Root logins run commands directly; other users require installed, passwordless `sudo`. Set `proxmox_ssh.host_key` in `settings.json` to pin the host key; verification is disabled when this optional field is omitted. Pi-hole DNS uses only its API; no Pi-hole SSH credentials or host files are required.
 
 ## Configure and initialize
 
+Copy [the starter](../examples/README.md) into your own infrastructure project,
+then configure its two roots and shared settings. Replace the local module
+sources with the pinned GitHub sources shown in that guide before initializing
+a separate project. From the copied directory:
+
 ```sh
 umask 077
-cp environments/home/home.tfvars.example environments/home/home.tfvars
-cp environments/host-config/hosts.tfvars.example environments/host-config/hosts.tfvars
-make init
-make check
+cp settings.json.example settings.json
+cp he-ipv6.json.example he-ipv6.json
+cp .env.example .env
+# Edit settings.json, home/main.tf, and .env, then load credentials:
+set -a
+source .env
+set +a
+terraform -chdir=host-config init
+terraform -chdir=home init
 ```
 
-Replace every illustrative address, ID, SSH key, template, datastore, and NTP target. Both environments use separate state. Keep state and plans on an encrypted, backed-up workstation. Sensitive Terraform values still appear in state and saved plans. Run only one writer against Pi-hole and use `-parallelism=1` for the home environment.
+Replace every illustrative address, ID, SSH key, template, datastore, and NTP target. Both roots use separate state. Keep state and plans on an encrypted, backed-up workstation. Sensitive Terraform values still appear in state and saved plans. Run only one writer against Pi-hole and use `-parallelism=1` for the home environment.
 
 Leave new guests `started = false` and `on_boot = false`. Set `manage_host_firewall = true` only after reviewing/importing the existing full node rule list and datacenter/node settings: Terraform will own those resources. Otherwise establish equivalent host protection separately. The generated policy is visible through `terraform output host_policy`. Preserve the bootstrap administrator `/32` until admin VPN access works.
 
@@ -136,20 +146,18 @@ Nesting is managed automatically by a native `magodo/restful` resource using the
 
 Existing containers acquire REST feature ownership on the next apply without an import. The additional resource is replaced when the container is replaced, including reuse of the same CT ID. Its destroy action sends a feature-only PUT disabling nesting before container deletion; it never deletes the container through the REST provider. TLS verification follows `proxmox_insecure_tls`. No root authentication, host commands, scripts or per-container manual API requests are required. Proxmox may stage feature changes on running containers until their next restart; this module does not automatically reboot them.
 
-For existing deployments, rename `template_id` to `vm_template_id` in your private tfvars. A `moved` block migrates the existing VM resource address to its new `[0]` index without recreating it; existing network, firewall and DNS resource addresses remain. Inspect the plan for moves rather than replacements. Changing an existing entry's `type` does not convert its filesystem: create a new guest with a new ID/slot and migrate the workload/data separately. Changing a template can require replacement.
+For existing deployments, rename `template_id` to `vm_template_id` in your module call. A `moved` block migrates the existing VM resource address to its new `[0]` index without recreating it; existing network, firewall and DNS resource addresses remain. Inspect the plan for moves rather than replacements. Changing an existing entry's `type` does not convert its filesystem: create a new guest with a new ID/slot and migrate the workload/data separately. Changing a template can require replacement.
 
 ### Raw LXC mounts and cgroups over SSH
 
 Use `lxc_mounts` for raw `lxc.mount.entry` values and `lxc_cgroups` for cgroup2 key suffixes mapped to lists of values. Both are optional, default empty and are LXC-only. These inputs edit the Proxmox container configuration through SSH because the API cannot write arbitrary `lxc.*` entries. Existing API authentication is unchanged; no root API password or additional provider is required.
 
-Set host access at the top level of `home.tfvars` (this is separate from `environments/host-config/hosts.tfvars`):
+Set host access in the shared `settings.json`; both roots consume the same SSH connection:
 
-```hcl
-proxmox_ssh = {
-  host = "192.168.50.10"
-  user = "root"
-  # port = 22
-  # host_key = "ssh-ed25519 AAAA..." # Supply the real host key to verify the server.
+```json
+"proxmox_ssh": {
+  "host": "192.0.2.10",
+  "user": "root"
 }
 ```
 
@@ -176,9 +184,11 @@ Create new guests stopped using the existing two-apply activation workflow. Chan
 
 ## Apply Proxmox host routing
 
+Run the following commands from your copied starter directory.
+
 ```sh
-terraform -chdir=environments/host-config plan -var-file=hosts.tfvars -out=hosts.tfplan
-terraform -chdir=environments/host-config apply hosts.tfplan
+terraform -chdir=host-config plan -out=hosts.tfplan
+terraform -chdir=host-config apply hosts.tfplan
 ```
 
 Native Terraform file/service resources install and immediately start a systemd unit on Proxmox. It enables IPv4 forwarding and maintains a metric-42760 blackhole route for the aggregate. Connected guest `/30` routes win over that aggregate, while unused addresses terminate locally. A `pve-guests.service` drop-in orders routing and `pve-firewall.service` before autostart and checks that both are active. It uses `Wants` plus separate `ExecStartPre` checks, so stopping routing does not propagate a stop into `pve-guests` and its node-wide guest shutdown action. Startup checks apply to all guests autostarted through that Proxmox service. The unit uses the host's standard `sysctl` and `ip` commands; there are no custom host scripts.
@@ -198,11 +208,11 @@ Writing the unit file alone does not execute it. The service resource enables an
 
 ## Optional HE IPv6
 
-Use the [IPv6 deployment guide](ipv6.md) for the default-off shared toggle, Proxmox tunnel/VIP, isolated ULA guest networks, TCP DNAT and permitted TCP/UDP/ICMP SNAT. Both roots must receive the same `-var-file=../he-ipv6.tfvars`; host-config applies first when enabling and home first when disabling. Public DNS and the old endpoint/EdgeRouter cutover remain manual. Home needs `proxmox_ssh` when HE is enabled; retain its settings through cleanup. Local DNS remains IPv4-only.
+Use the [IPv6 deployment guide](ipv6.md) for the default-off shared toggle, Proxmox tunnel/VIP, isolated ULA guest networks, TCP DNAT and permitted TCP/UDP/ICMP SNAT. Both roots read the same shared `he-ipv6.json`; host-config applies first when enabling and home first when disabling. Public DNS and the old endpoint/EdgeRouter cutover remain manual. Home needs `proxmox_ssh` when HE is enabled; retain its settings through cleanup. Local DNS remains IPv4-only.
 
 ## Declare local DNS records
 
-Set the required `domain` variable in `home.tfvars` (for example, `domain = "home.example.com"`); it has no default. Each guest's `dns` map is passed to `modules/dns_records`, which appends this domain to each alias and manages `pihole_dns_record` resources through Pi-hole's local DNS API. `direct` resolves to the guest IP; `proxy` resolves to a declared proxy guest (`proxy_name`) or an external proxy IP (`proxy_address`); `none` creates no record. The inventory example shows both direct and proxy aliases. Removing an alias removes its Terraform-owned record.
+Set the required `domain` variable in `home/main.tf` (for example, `domain = "home.example.com"`); it has no default. Each guest's `dns` map is passed to `modules/dns_records`, which appends this domain to each alias and manages `pihole_dns_record` resources through Pi-hole's local DNS API. `direct` resolves to the guest IP; `proxy` resolves to a declared proxy guest (`proxy_name`) or an external proxy IP (`proxy_address`); `none` creates no record. The starter shows a proxy alias; use `mode = "direct"` to point an alias at the guest itself. Removing an alias removes its Terraform-owned record.
 
 To migrate from the existing wildcard, first declare or import all names currently relying on it and verify their explicit records. Then back up and remove the old wildcard at its current source, validate the Pi-hole configuration, and reload it using the installed version's procedure. Terraform does not remove that existing unmanaged directive. If an earlier version of this configuration was applied, remove its `conf-file=/etc/pihole/hsp-dns.conf` include before applying a plan that deletes that file.
 
@@ -211,17 +221,17 @@ To migrate from the existing wildcard, first declare or import all names current
 Start with a disposable VM and an unused DNS name:
 
 ```sh
-terraform -chdir=environments/home plan -var-file=home.tfvars -parallelism=1 -out=home.tfplan
-terraform -chdir=environments/home apply -parallelism=1 home.tfplan
-terraform -chdir=environments/home output router_route
-terraform -chdir=environments/home output public_forwards
+terraform -chdir=home plan -parallelism=1 -out=home.tfplan
+terraform -chdir=home apply -parallelism=1 home.tfplan
+terraform -chdir=home output router_route
+terraform -chdir=home output public_forwards
 ```
 
 Review the saved plan before applying it. Inspect the stopped clone's NIC, SDN bridge, assigned address, and inherited settings. Confirm firewall enablement at datacenter/node/guest/NIC levels, DROP policies, `ipfilter-net0`, MAC filtering, and effective rule order. The established firewall backend is used; VNet/FORWARD rules from the experimental nftables backend are not required.
 
 On the EdgeRouter, add the aggregate route from `router_route` via Proxmox's existing LAN IP. Add selected port forwards from `public_forwards` to guest IPs and ports. Check the existing WAN firewall/NAT permits replies. No VLAN configuration is needed. Do not forward Proxmox management or guest SSH.
 
-The route makes guests reachable at Layer 3 from the LAN. Host and guest firewalls enforce access restrictions. Set top-level `public_ports_lan_cidrs` in `home.tfvars` to allow selected LAN subnets to reach each guest's declared `public_ports`; the default `[]` keeps those LAN sources blocked. These narrow exceptions precede protected-source drops. Access through the router's public endpoint from inside the LAN also requires hairpin NAT. See the [LAN access reference](firewall-roles.md#lan-access-to-public-ports).
+The route makes guests reachable at Layer 3 from the LAN. Host and guest firewalls enforce access restrictions. Set top-level `public_ports_lan_cidrs` in `home/main.tf` to allow selected LAN subnets to reach each guest's declared `public_ports`; the default `[]` keeps those LAN sources blocked. These narrow exceptions precede protected-source drops. Access through the router's public endpoint from inside the LAN also requires hairpin NAT. See the [LAN access reference](firewall-roles.md#lan-access-to-public-ports).
 
 ## Start inspected guests
 
@@ -231,7 +241,7 @@ Install VPN/proxy software through your normal configuration process. The admin 
 
 ### Bootstrap guest SSH
 
-For initial setup, add `bootstrap = true` inside the selected guest's entry in `home.tfvars`, for example `guests.vpn-admin`. This allows incoming TCP 22 from each `bootstrap_admin_cidrs` IPv4 `/32` before the guest's protected LAN block. Bootstrap defaults to `false` and applies only to the selected guest. It works with `manage_host_firewall = false` because it manages the guest firewall directly.
+For initial setup, add `bootstrap = true` inside the selected guest's entry in `home/main.tf`, for example `guests.vpn-admin`. This allows incoming TCP 22 from each `bootstrap_admin_cidrs` IPv4 `/32` before the guest's protected LAN block. Bootstrap defaults to `false` and applies only to the selected guest. It works with `manage_host_firewall = false` because it manages the guest firewall directly.
 
 Apply the change through the normal plan/apply workflow. Start the inspected guest with `started = true`, ensure your workstation can route to its address using the EdgeRouter aggregate route, and connect using the configured SSH key. With `vpn-admin` in slot 0 of `10.77.0.0/24` and the default username:
 

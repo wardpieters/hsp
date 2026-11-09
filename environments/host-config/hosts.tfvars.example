@@ -1,7 +1,0 @@
-proxmox_ssh = {
-  host = "192.168.50.10", user = "terraform"
-}
-platform_cidr = "10.77.0.0/24"
-
-# Optional HE: also pass -var-file=../he-ipv6.tfvars (same file as home).
-# Enable host-config then home; disable home then host-config.
