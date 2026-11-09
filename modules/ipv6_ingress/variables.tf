@@ -32,15 +32,15 @@ variable "firewall_bridges" {
   }
 }
 variable "forwards" {
-  type    = map(object({ guest = string, port = number, address = string, vnet_id = string }))
+  type    = map(object({ guest = string, protocol = optional(string, "tcp"), port = number, address = string, vnet_id = string }))
   default = {}
   validation {
-    condition = try(length(distinct([for f in values(var.forwards) : f.port])) == length(var.forwards) && alltrue([for f in values(var.forwards) :
+    condition = try(length(distinct([for f in values(var.forwards) : "${f.protocol}:${f.port}"])) == length(var.forwards) && alltrue([for f in values(var.forwards) :
       cidrhost("${f.address}/128", 0) == f.address && cidrhost("${f.address}/48", 0) == cidrhost(var.ula_prefix, 0) &&
       can(regex("^[A-Za-z][A-Za-z0-9]{0,7}$", f.vnet_id)) && can(regex("^[a-z][a-z0-9-]{0,62}$", f.guest)) &&
-      floor(f.port) == f.port && f.port >= 1 && f.port <= 65535 && !contains([22, 8006], f.port)
+      contains(["tcp", "udp"], f.protocol) && floor(f.port) == f.port && f.port >= 1 && f.port <= 65535 && !contains([22, 8006], f.port)
     ]), false)
-    error_message = "Forward targets need exact ULA hosts, valid VNets/guest names and unique non-management TCP ports."
+    error_message = "Forward targets need exact ULA hosts, valid VNets/guest names and unique non-management TCP/UDP protocol-port pairs."
   }
 }
 variable "egress" {
@@ -67,6 +67,7 @@ variable "hairpin" {
     target_address = string
     target_vnet_id = string
     target_gateway = string
+    protocol       = optional(string, "tcp")
     port           = number
   }))
   default = {}
@@ -82,7 +83,7 @@ variable "hairpin" {
         cidrhost("${address}/128", 0) == address && cidrhost("${address}/48", 0) == cidrhost(var.ula_prefix, 0)
       ]) &&
       h.target_gateway == cidrhost("${h.target_address}/64", 1) &&
-      var.forwards[h.forward_key] == { guest = h.target_guest, address = h.target_address, vnet_id = h.target_vnet_id, port = h.port }
+      var.forwards[h.forward_key] == { guest = h.target_guest, address = h.target_address, vnet_id = h.target_vnet_id, protocol = h.protocol, port = h.port }
     ]), false)
     error_message = "Hairpin grants require consistent composite keys, canonical ULA hosts, valid names/VNets, a target /64 gateway at offset 1 and an exact existing forward."
   }

@@ -6,8 +6,8 @@ locals {
     port    = p.port
   }]])
   permissions = join("\n", concat(["H|${var.public_address}|${var.ula_prefix}"], sort(distinct(concat(
-    [for f in values(var.forwards) : "D|${var.public_address}|${f.address}|tcp|${f.port}|${f.vnet_id}"],
-    [for h in values(var.hairpin) : "P|${var.public_address}|${h.source_address}|tcp|${h.port}|${h.source_vnet_id}|${h.target_address}|${h.target_vnet_id}|${h.target_gateway}"],
+    [for f in values(var.forwards) : "D|${var.public_address}|${f.address}|${f.protocol}|${f.port}|${f.vnet_id}"],
+    [for h in values(var.hairpin) : "P|${var.public_address}|${h.source_address}|${h.protocol}|${h.port}|${h.source_vnet_id}|${h.target_address}|${h.target_vnet_id}|${h.target_gateway}"],
     [for e in local.egress_rules : "E|${var.public_address}|${e.address}|${e.protocol}|${e.port == null ? "none" : tostring(e.port)}|${e.vnet_id}"]
   )))))
 }
