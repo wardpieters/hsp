@@ -150,7 +150,7 @@ DNS target selection and firewall dependencies are configured separately. For ex
 
 Rules are generated in this order, with the default DROP policy handling anything left unmatched:
 
-1. Apply IPv6 policy: blanket incoming/outgoing drops by default; for HE participants, scoped control traffic, explicit hairpin exceptions before protected-network drops, then mapped TCP ingress/effective internet egress. The remaining rules below are IPv4.
+1. Apply IPv6 policy: blanket incoming/outgoing drops by default; for HE participants, scoped control traffic, derived hairpin exceptions before protected-network drops, then derived TCP/UDP ingress/effective internet egress. The remaining rules below are IPv4.
 2. Allow enabled bootstrap SSH, declared dependencies, and role-generated dependencies, including admin VPN management access.
 3. Allow configured LAN service sources to reach the selected private proxy on TCP 443, then approved DNS and NTP destinations.
 4. Allow configured LAN sources to reach declared public ports.
@@ -184,21 +184,25 @@ The source of truth is [role/dependency generation](../environments/home/policy.
 
 ## Optional IPv6 forwarding and egress
 
-[The IPv6 guide](ipv6.md) explains the single shared public address, explicit TCP `he_ipv6.port_forwards`, and per-slot ULA /64s. A forwarded port must also be in the guest's TCP `public_ports`; an IPv4 public-port declaration alone does not enable IPv6 ingress. Existing named connections, role-based guest administration and monitoring dependencies stay IPv4-only. Global/per-guest/role internet permissions apply to IPv6 when HE is on; a global UDP123 entry selects every guest for IPv6. Configured outgoing ICMP includes ping; RA/RS/redirect/nonlocal NDP remain denied, and no incoming ping is automatically opened.
+[The IPv6 guide](ipv6.md) explains the shared public address and per-slot ULA
+/64s. With HE enabled, guest TCP/UDP `public_ports` automatically generate
+IPv6 forwards. Each protocol/port pair must have one guest owner; duplicate
+ownership blocks planning. Existing named connections and role-generated
+administration/monitoring dependencies remain IPv4-only. Effective internet
+permissions also apply to IPv6; outgoing ICMP includes ping, while
+RA/RS/redirect/nonlocal NDP remain denied.
 
 The host's independent HE INPUT guard closes undeclared listeners even when `manage_host_firewall = false`. In that mode, additional transport/control acceptance remains operator-owned and is described by `ipv6_host_requirements`; no full node-firewall takeover occurs. Required related ICMPv6 errors precede application-source protection, including errors from a protected tunnel peer. Native guest source/MAC filters and protected networks remain enforced.
 
-Explicit `he_ipv6.hairpin` grants allow only named managed guests to call
-selected public TCP forward keys, including self-hairpin. Roles do not
-create grants; an explicit grant is a narrow operator-authorized exception
-to protected destinations even for restrictive VPN roles. Internet egress
-and hairpin remain independent. Hairpin-only sources participate in IPv6
-without internet or public-listener allowances. Targets must retain their
-TCP `public_ports` declaration and see the target ULA gateway as the client;
-external ingress still preserves real client identity. Exact native
-outgoing VIP/128 and incoming gateway/128-to-target/128 exceptions precede
-protected drops, while the routed guard prevents direct ULA access.
-LAN/VPN-prefix and Proxmox-originated hairpin are excluded. Local DNS,
-named connections and role-generated administration/monitoring dependencies
-remain IPv4-only. See the
+A managed guest can reach a public TCP/UDP service through the VIP when
+its effective internet egress permits that protocol/port OR an explicit
+`connections` entry permits that directed source-to-target protocol/port.
+The same egress rule applies to self-hairpin. Public listeners alone do not
+authorize clients. Role-generated guest connections remain IPv4-only.
+Explicit-connection-only clients receive IPv6 without internet or listener
+allowances. Targets see their ULA gateway as the client;
+external ingress preserves real client identity. Exact outgoing VIP/128 and
+incoming gateway/128-to-target/128 exceptions precede protected drops, while
+the routed guard prevents direct ULA access. LAN/VPN-prefix and
+Proxmox-originated hairpin are excluded. See the
 [hairpin contract and pending live checks](ipv6.md#managed-guest-hairpin-grants).
