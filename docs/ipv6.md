@@ -20,45 +20,46 @@ public service address. The host owns offset 2 of the routed prefix as a
 addresses come from a separate, stable ULA /48, with one /64 per slot and
 gateway/guest offsets 1/2. A routed /48 from HE is unnecessary.
 
-For the deployment discussed in the design:
+The following are documentation addresses, not a working HE allocation. Replace
+them with your own tunnel and routed-prefix details:
 
 | Purpose | Value |
 | --- | --- |
-| HE server IPv4 | `216.66.84.46` |
-| Router public IPv4 registered with HE | `178.226.181.114` |
-| Proxmox LAN/local tunnel IPv4 | `192.168.100.10` |
-| HE server/client tunnel IPv6 | `2001:470:1f14:4d4::1` / `2001:470:1f14:4d4::2/64` |
-| Routed service prefix | `2001:470:1f15:4d6::/64` |
-| Shared public service address | `2001:470:1f15:4d6::2` |
-| Illustrative private aggregate | `fd42:77:1::/48` |
-| Proxy in slot 2: gateway / guest | `fd42:77:1:2::1` / `fd42:77:1:2::2` |
+| HE server IPv4 | `203.0.113.1` |
+| Router public IPv4 registered with HE | `198.51.100.10` |
+| Proxmox LAN/local tunnel IPv4 | `192.0.2.10` |
+| HE server/client tunnel IPv6 | `2001:db8:1::1` / `2001:db8:1::2/64` |
+| Routed service prefix | `2001:db8:2::/64` |
+| Shared public service address | `2001:db8:2::2` |
+| Illustrative private aggregate | `fdab:cdef:1000::/48` |
+| Proxy in slot 2: gateway / guest | `fdab:cdef:1000:2::1` / `fdab:cdef:1000:2::2` |
 
 Choose a unique ULA /48 for your site and keep it stable. Public addresses
 are never assigned to guest VNets. The Proxmox HE default route is host-wide;
 host-originated IPv6 may also use it, subject to host filtering.
 
-Copy [the shared example](../environments/he-ipv6.tfvars.example) to
-`environments/he-ipv6.tfvars` (already Git-ignored). Fill in your allocation
-and change `enabled` to true only for the planned cutover:
+Copy [the shared example](../examples/he-ipv6.json.example) to `he-ipv6.json`
+in your copied starter directory. Fill in your own allocation and change
+`enabled` to true only for the planned cutover:
 
-```hcl
-he_ipv6 = {
-  enabled       = true
-  server_ipv4   = "216.66.84.46"
-  local_ipv4    = "192.168.100.10"
-  client_ipv6   = "2001:470:1f14:4d4::2/64"
-  server_ipv6   = "2001:470:1f14:4d4::1"
-  routed_prefix = "2001:470:1f15:4d6::/64"
-  ula_prefix    = "fd42:77:1::/48"
-  mtu           = 1480
-  protected_cidrs = [] # Add any real protected IPv6 LAN/VPN networks.
-
+```json
+{
+  "enabled": true,
+  "server_ipv4": "203.0.113.1",
+  "local_ipv4": "192.0.2.10",
+  "client_ipv6": "2001:db8:1::2/64",
+  "server_ipv6": "2001:db8:1::1",
+  "routed_prefix": "2001:db8:2::/64",
+  "ula_prefix": "fdab:cdef:1000::/48",
+  "mtu": 1480,
+  "protected_cidrs": []
 }
 ```
 
-Use the SAME shared file for both Terraform roots. Neither root reads the
-other's state. Forgetting the file selects the off default and can plan
-removal of an existing HE deployment; review the saved plans.
+Both Terraform roots read this same JSON file; neither reads the other's state.
+Keep it present for the lifetime of the deployment. The checked-in template is
+disabled by default, so falling back to it can plan removal of an existing HE
+deployment. Review both saved plans before applying.
 
 Public forwarding is derived from each guest's `public_ports` in the home
 configuration. For example:
@@ -209,27 +210,30 @@ single node-rules resource. IPv6 host GUI/SSH remains closed.
 
 ## Ordered cutover
 
+Run these commands from your copied starter directory, with the shared JSON
+settings configured and credentials loaded.
+
 Review both saved plans while the old tunnel is still available:
 
 ```sh
-terraform -chdir=environments/host-config init
-terraform -chdir=environments/home init
-terraform -chdir=environments/host-config plan -var-file=hosts.tfvars -var-file=../he-ipv6.tfvars -out=hosts.tfplan
-terraform -chdir=environments/home plan -var-file=home.tfvars -var-file=../he-ipv6.tfvars -parallelism=1 -out=home.tfplan
+terraform -chdir=host-config init
+terraform -chdir=home init
+terraform -chdir=host-config plan -out=hosts.tfplan
+terraform -chdir=home plan -parallelism=1 -out=home.tfplan
 ```
 
 Manually stop the old HE endpoint BEFORE applying the enabled host plan.
 Expect an IPv6 cutover outage. Then apply host-config followed by home:
 
 ```sh
-terraform -chdir=environments/host-config apply hosts.tfplan
-terraform -chdir=environments/home apply -parallelism=1 home.tfplan
-terraform -chdir=environments/host-config output he_ipv6_status
-terraform -chdir=environments/home output ipv6_networks
-terraform -chdir=environments/home output ipv6_port_forwards
-terraform -chdir=environments/home output ipv6_egress
-terraform -chdir=environments/home output ipv6_hairpin
-terraform -chdir=environments/home output ipv6_host_requirements
+terraform -chdir=host-config apply hosts.tfplan
+terraform -chdir=home apply -parallelism=1 home.tfplan
+terraform -chdir=host-config output he_ipv6_status
+terraform -chdir=home output ipv6_networks
+terraform -chdir=home output ipv6_port_forwards
+terraform -chdir=home output ipv6_egress
+terraform -chdir=home output ipv6_hairpin
+terraform -chdir=home output ipv6_host_requirements
 ```
 
 Check actual guest OS addresses/routes and listeners. VM cloud-init changes
@@ -238,8 +242,8 @@ any needed guest reconfiguration/restart deliberately. Keep the existing
 stopped-first activation workflow for new guests. Terraform does not restart
 guests or networking, and IPv4 guest startup is not gated on HE availability.
 
-Manually move the EdgeRouter protocol-41 DNAT target to `192.168.100.10`,
-restricted to HE server `216.66.84.46`; ensure the return IPv4 encapsulation
+Manually move the EdgeRouter protocol-41 DNAT target to `192.0.2.10`,
+restricted to HE server `203.0.113.1`; ensure the return IPv4 encapsulation
 uses the registered public IPv4. This is IP protocol 41, not TCP/UDP port 41.
 No IPv6 address or route on the physical LAN/EdgeRouter is required for this
 Proxmox-terminated design. Do not run both HE endpoints intentionally.
@@ -265,8 +269,8 @@ See [HE's FAQ](https://ipv6.he.net/certification/faq.php).
 After external acceptance, publish public authoritative records, for example:
 
 ```dns
-mail.example.com. AAAA 2001:470:1f15:4d6::2
-www.example.com.  AAAA 2001:470:1f15:4d6::2
+mail.example.com. AAAA 2001:db8:2::2
+www.example.com.  AAAA 2001:db8:2::2
 example.com.     MX 10 mail.example.com.
 ```
 
@@ -288,7 +292,7 @@ VNets, exact firewall bridges and `hsp-he6` for the matrix below:
 | --- | --- |
 | `systemctl status hsp-he-ipv6 hsp-ipv6-ingress`; `ip -d tunnel show hsp-he6`; `ip -6 addr`; `ip -6 route show table all` | Owned tunnel/VIP, per-slot ULA routes, reserved blackhole/default routes; no changes to IPv4. UP alone does not prove HE connectivity. |
 | `nft list table ip6 hsp_he_host`; `nft list table ip6 hsp_he_ingress`; `ip6tables-save`; `conntrack -L -f ipv6 -o extended` | Correct syntax/compiled rules, counters, and zone 0 on the routed/NAT hop and zone 1 on exact owned legacy firewall bridges, in both directions. The router guard skips intermediate `fwbr*` legs; native guest filtering still applies there and the routed hop must hit the guard. |
-| External `curl -6 --resolve 'mail.example.com:443:[2001:470:1f15:4d6::2]' https://mail.example.com/` | Correct GUI through the proxy before public DNS publication. |
+| External `curl -6 --resolve 'mail.example.com:443:[2001:db8:2::2]' https://mail.example.com/` | Correct GUI through the proxy before public DNS publication. |
 | Ready SMTP/submission/IMAP with TLS/STARTTLS | Correct mail guest; application logs contain the original external IPv6 client. |
 | Egress-only guest: allowed TCP/UDP and `ping -6` with configured ICMP | Connections/replies work; remote service sees the shared public VIP. Unlisted ports remain denied. |
 | Large transfers/PMTU and related ICMPv6, including errors sourced from the tunnel-link prefix | No size-dependent stalls; related errors are accepted only for currently authorized NAT flows. |

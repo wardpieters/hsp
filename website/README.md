@@ -1,6 +1,6 @@
 # Documentation website
 
-This Docusaurus site reads the root `README.md` and the Markdown in `docs/` directly. The original guides and engineering records remain the source of truth; there is no content copy or synchronization step.
+This Docusaurus site reads the root `README.md`, `examples/README.md`, and the Markdown in `docs/` directly. The original guides and engineering records remain the source of truth; there is no content copy or synchronization step.
 
 ## Local development
 
@@ -26,7 +26,7 @@ Equivalent npm commands are `npm --prefix website ci`, `npm --prefix website sta
 
 ## Content and navigation
 
-- Set `HSP_DOMAIN=home.ward.nl` in the repository root's local `.env` to configure the domain shown in the deployed docs. An exported `HSP_DOMAIN` takes precedence; without either setting, the site uses `home.example.com`. Restart the development server or rebuild after changing it.
+- Set `HSP_DOMAIN=home.example.com` in the repository root's local `.env` to configure the domain shown in the deployed docs. An exported `HSP_DOMAIN` takes precedence; without either setting, the site uses `home.example.com`. Restart the development server or rebuild after changing it.
 - Write `{{HSP_DOMAIN}}` in Markdown prose and code examples. Docusaurus substitutes the domain during compilation, so displayed and copied commands contain the resolved hostname and need no host-side variable or `.env`. Only this public setting is substituted; infrastructure credentials remain private. The setting controls documentation examples, while Terraform DNS configuration remains separate.
 - `docs/introduction.md` is the site homepage.
 - `docs/chapters/` contains the chapter indexes and links to guide sections.

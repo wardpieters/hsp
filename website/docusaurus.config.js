@@ -54,7 +54,7 @@ const config = {
       docs: {
         path: '..',
         routeBasePath: '/',
-        include: ['README.md', 'docs/**/*.md'],
+        include: ['README.md', 'examples/README.md', 'docs/**/*.md'],
         exclude: ['docs/superpowers/**/2026-10-30-docusaurus*.md'],
         sidebarPath: require.resolve('./sidebars.js'),
         showLastUpdateTime: false,

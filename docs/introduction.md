@@ -6,7 +6,7 @@ description: A reading guide to the home self-hosting platform, from initial set
 
 # Home self-hosting platform
 
-This documentation explains how to provision and operate a home self-hosting platform with Terraform, Proxmox VE 9.x, and Pi-hole v6. The platform gives each VM or LXC its own network, address, DNS records, and explicit firewall policy. An EdgeRouter provides the aggregate route and selected public port forwards.
+This documentation explains how to provision and operate a home self-hosting platform with Terraform, Proxmox VE 9.x, and Pi-hole v6. The platform gives each VM or LXC its own network, address, DNS records, and explicit firewall policy. Your router provides the aggregate route and selected public port forwards; the deployment guide uses EdgeRouter commands as examples.
 
 Start with the platform overview, follow the deployment guide in order, and use the firewall reference when declaring services and access. The verification chapter explains what the repository's tests cover and what still needs checking on live infrastructure.
 
@@ -24,8 +24,10 @@ Each chapter opens with an index. Individual guides also have a section index, a
 
 ## First deployment
 
+Use the [starter example](../examples/README.md) for a small, copyable project.
+
 1. Read the [platform guide](../README.md) to understand what Terraform manages.
-2. Complete the [deployment prerequisites](deployment.md#prerequisites) and [configure the environments](deployment.md#configure-and-initialize).
+2. Complete the [deployment prerequisites](deployment.md#prerequisites) and [configure the starter](deployment.md#configure-and-initialize).
 3. Review [roles and shared firewall rules](firewall-roles.md) before exposing services.
 4. Follow the deployment guide through provisioning, inspection, first start, and [live acceptance](deployment.md#live-acceptance-and-removal).
 

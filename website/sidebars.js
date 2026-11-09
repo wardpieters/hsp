@@ -12,6 +12,7 @@ module.exports = {
       type: 'category', label: '2. Deployment',
       link: {type: 'doc', id: 'docs/chapters/deployment'},
       items: [
+        {type: 'doc', id: 'examples/README', label: 'Starter example'},
         {type: 'doc', id: 'docs/deployment', label: 'Deploying with Terraform'},
         {type: 'doc', id: 'docs/ipv6', label: 'Optional HE IPv6'},
         {type: 'doc', id: 'docs/debian-setup', label: 'Debian guest setup'},
