@@ -12,3 +12,6 @@ with no explicit host key. Optional fields retain their defaults when null.
 Endpoints are checked before the settings output can be consumed by providers.
 Credentials and provider configurations belong in the calling root. Inventory
 and firewall validation belong in the platform and host modules.
+
+Set `require_api_endpoints = true` when configuring API providers, so omitted or
+null endpoints cannot fall back to unchecked provider environment settings.
