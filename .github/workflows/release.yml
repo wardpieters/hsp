@@ -32,13 +32,14 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
-      - uses: actions/upload-pages-artifact@v4
-        with:
-          path: website/build
       - name: Create version tag and GitHub release
         run: npm run release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Release preparation rebuilds the site with the new version's example pins.
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: website/build
 
   deploy:
     needs: release

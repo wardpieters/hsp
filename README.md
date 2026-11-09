@@ -30,7 +30,7 @@ For example, the platform inventory can be as small as:
 
 ```hcl
 module "hsp" {
-  source = "git::https://github.com/wardpieters/hsp.git//modules/hsp?ref=da64fdf3b9dac3809d31f8a4d653fdcd203a7dfe"
+  source = "git::https://github.com/wardpieters/hsp.git//modules/hsp?ref=v1.0.0"
   providers = {
     proxmox        = proxmox
     pihole         = pihole
@@ -69,7 +69,7 @@ implementation.
 
 The addresses above are documentation examples. Replace them, the IDs, the
 template/storage settings, and the SSH key before deployment. Pin a reviewed
-commit when upgrading HSP; Git sources use `?ref=`, not Terraform's `version`
+release tag when upgrading HSP; Git sources use `?ref=`, not Terraform's `version`
 argument.
 
 ## Get started

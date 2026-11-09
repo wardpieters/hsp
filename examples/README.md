@@ -28,15 +28,16 @@ paths in `home/main.tf` and `host-config/main.tf` with these published pins:
 
 ```hcl
 # connections (used by both roots)
-source = "git::https://github.com/wardpieters/hsp.git//modules/connections?ref=da64fdf3b9dac3809d31f8a4d653fdcd203a7dfe"
+source = "git::https://github.com/wardpieters/hsp.git//modules/connections?ref=v1.0.0"
 # hsp (home root)
-source = "git::https://github.com/wardpieters/hsp.git//modules/hsp?ref=da64fdf3b9dac3809d31f8a4d653fdcd203a7dfe"
+source = "git::https://github.com/wardpieters/hsp.git//modules/hsp?ref=v1.0.0"
 # proxmox_host (host-config root)
-source = "git::https://github.com/wardpieters/hsp.git//modules/proxmox_host?ref=da64fdf3b9dac3809d31f8a4d653fdcd203a7dfe"
+source = "git::https://github.com/wardpieters/hsp.git//modules/proxmox_host?ref=v1.0.0"
 ```
 
 Keep the module blocks and provider mappings; only replace their `source` values.
-Use one reviewed commit across the module calls when upgrading.
+Use one reviewed release tag across the module calls when upgrading. The release
+pipeline updates these published pins automatically for each new version.
 
 ## Configure
 
@@ -119,7 +120,7 @@ inside the guests separately.
 - Add guest dependencies through `connections` and explicit outbound access through `internet_egress_ports`.
 - Follow [the IPv6 guide](https://github.com/wardpieters/hsp/blob/main/docs/ipv6.md) before enabling the shared HE configuration.
 
-Keep the Git commit pin consistent across the module calls when upgrading, then
+Keep the release tag consistent across the module calls when upgrading, then
 review the plan. The examples intentionally have no migration-only `moved`
 blocks: existing deployments need their own state/import plan and preserved
 resource addresses. Do not apply this fresh inventory against existing guests

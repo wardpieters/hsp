@@ -4,7 +4,7 @@ This Docusaurus site reads the root `README.md`, `examples/README.md`, and the M
 
 ## Local development
 
-Install Node.js 22.14 or later and npm, then run from the repository root:
+Install Node.js 22.22.2 (22.x), 24.15 or later and npm, then run from the repository root:
 
 ```sh
 make docs-install
@@ -43,7 +43,9 @@ In the repository's **Settings → Pages → Build and deployment**, select **Gi
 
 Release versions come from Git tags, starting at `v1.0.0` when there is no previous release. `feat:` commits produce a minor release; a `!` marker or `BREAKING CHANGE:` footer produces a major release. All other new commits produce a patch release, including documentation, maintenance, and commits without a Conventional Commits prefix. The highest applicable bump since the previous release wins. Use `npm --prefix website test` to verify these rules.
 
-The configuration publishes GitHub releases only. It does not publish an npm package or commit generated version changes back to `main`; `website/package.json` is the private documentation toolchain, not the released Terraform module version. semantic-release's standard `[skip release]` / `[release skip]` commit markers still opt individual commits out of release analysis.
+During release preparation, `website/scripts/release-examples.cjs` updates the published module references in the root README and starter guide to the calculated release tag, then rebuilds the documentation. A failed rebuild stops the release. `@semantic-release/git` commits those two guides to `main` with `[skip ci]` to prevent a release loop; the release tag includes that commit. The Pages artifact is uploaded after release preparation, so the website shows the same pins as the tagged guides. Runnable Terraform examples retain their relative module sources for development and tests.
+
+The configuration publishes GitHub releases only. It does not publish an npm package; `website/package.json` is the private documentation toolchain, not the released Terraform module version. semantic-release's standard `[skip release]` / `[release skip]` commit markers still opt individual commits out of release analysis. Branch protection must allow the workflow to push its release commit to `main`.
 
 The production origin and `/hsp/` base path are configured in `website/docusaurus.config.js`. For another static host, update those settings and rebuild, then serve `website/build/` at the configured path.
 

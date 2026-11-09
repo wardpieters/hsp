@@ -13,6 +13,11 @@ module.exports = {
       ],
     }],
     ['@semantic-release/release-notes-generator', {preset: 'conventionalcommits'}],
+    [require.resolve('./scripts/release-examples.cjs'), {}],
+    ['@semantic-release/git', {
+      assets: ['README.md', 'examples/README.md'],
+      message: 'chore(release): ${nextRelease.version} [skip ci]',
+    }],
     ['@semantic-release/github', {
       successComment: false,
       failComment: false,
