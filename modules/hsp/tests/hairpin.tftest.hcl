@@ -13,10 +13,6 @@ mock_provider "proxmox" {}
 mock_provider "pihole" {}
 variables {
   domain                = "home.example.com"
-  proxmox_api_token     = "terraform@pve!offline=offline-test-only"
-  proxmox_endpoint      = "https://192.168.100.10:8006/"
-  pihole_url            = "https://192.168.100.53"
-  pihole_password       = "offline-test-only"
   node_name             = "pve"
   platform_cidr         = "10.77.0.0/24"
   host_address          = "192.168.100.10"
