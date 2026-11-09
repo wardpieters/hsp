@@ -3,10 +3,11 @@ import test, { before } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { networkFixture, renderedFiles } from './helpers/network-fixture.mjs';
 let enabled, revoked;
-const hairpin = {};
+const hairpin = {}, udpHairpin = {};
 before(async () => {
   enabled = await renderedFiles('modules/ipv6_ingress', 'tests/ingress.tftest.hcl', 'enabled');
   for (const name of ['enabled', 'grant_revoked', 'egress_revoked', 'remapped', 'self_only']) hairpin[name] = await renderedFiles('modules/ipv6_ingress', 'tests/hairpin.tftest.hcl', name);
+  for (const name of ['enabled', 'revoked', 'remapped', 'egress_revoked']) udpHairpin[name] = await renderedFiles('modules/ipv6_ingress', 'tests/udp.tftest.hcl', name);
   revoked = await renderedFiles('modules/ipv6_ingress', 'tests/ingress.tftest.hcl', 'revoked');
 });
 const vip = '2001:470:1f15:4d6::2', guest = 'fd42:77:1:1::2';
@@ -252,4 +253,61 @@ test('invalid E remote addresses and reply relationships never publish a journal
     await f.seed({ enumeration: null }); await f.run('reload');
     assert.deepEqual((await f.read()).flows, hairpinFlows().filter(x => x.id !== 'internet'));
   });
+});
+
+// Removing UDP permission must never revoke an otherwise identical TCP tuple.
+test('UDP hairpin revocation preserves TCP and cleans both bridge views with source port zero', async t => {
+  const udp = udpHairpin.enabled;
+  const removed = udpHairpin.revoked;
+  const f = await networkFixture(t, udp.ingress_helper, files(udp));
+  await f.seed({ links: { 'hsp-he6': {}, hsp1001: {}, hsp1002: {}, hsp1003: {} } });
+  await f.run('start');
+  const udpFlows = hairpinFlows().filter(x => !['external', 'internet'].includes(x.id)).map(x => ({ ...x, id: 'udp-' + x.id, proto: 'udp', origSport: x.id.endsWith('-bridge') ? x.origSport : 0, replyDport: x.id.endsWith('-source') ? 0 : x.replyDport }));
+  await f.seed({ flows: [...hairpinFlows(), ...udpFlows] });
+  await f.configure(files(removed)); await f.run('reload');
+  assert.deepEqual((await f.read()).flows, hairpinFlows());
+});
+
+function udpFlows() { return hairpinFlows().map(x => ({ ...x, id: 'udp-' + x.id, proto: 'udp' })); }
+async function udpFixture(t) {
+  const f = await networkFixture(t, udpHairpin.enabled.ingress_helper, files(udpHairpin.enabled));
+  await f.seed({ links: { 'hsp-he6': {}, hsp1001: {}, hsp1002: {}, hsp1003: {} } });
+  await f.run('start'); await f.seed({ flows: [...udpFlows(), ...hairpinFlows()] }); return f;
+}
+test('UDP forward remap removes old UDP bindings while preserving same-port TCP and UDP egress', async t => {
+  const f = await udpFixture(t); await f.configure(files(udpHairpin.remapped)); await f.run('reload');
+  assert.deepEqual((await f.read()).flows, [udpFlows().find(x => x.id === 'udp-internet'), ...hairpinFlows()]);
+  const purges = (await f.read()).conntrackDeletes.filter(x => x.command === '-D -f ipv6 --zone 0 --orig-dst ' + vip + ' -p udp --dport 443');
+  assert.equal(purges.length, 1); assert.match(purges[0].rules, /iifname "hsp-he6" drop/);
+});
+test('UDP egress revocation preserves UDP hairpin and same-port TCP', async t => {
+  const f = await udpFixture(t);
+  const internet = udpFlows().find(x => x.id === 'udp-internet');
+  await f.seed({ flows: [...udpFlows(), ...hairpinFlows(), { ...internet, id: 'udp-internet-bridge', zone: 1, replyDst: guest }] });
+  await f.configure(files(udpHairpin.egress_revoked)); await f.run('reload');
+  assert.deepEqual((await f.read()).flows, [...udpFlows().filter(x => x.id !== 'udp-internet'), ...hairpinFlows()]);
+});
+test('UDP cleanup retries after routed state is deleted and rejects malformed enumeration', async t => {
+  const f = await udpFixture(t); await f.configure(files(udpHairpin.revoked));
+  await f.seed({ enumeration: 'udp 17 src=' + guest });
+  await assert.rejects(f.run('reload'));
+  assert.match((await f.read()).tables.hsp_he_ingress, /iifname "hsp-he6" drop/);
+  await f.seed({ enumeration: null, fail: { tool: 'conntrack', match: '-D -f ipv6 --zone 1 --orig-src ' + gateway } });
+  await assert.rejects(f.run('reload'));
+  assert(!(await f.read()).flows.some(x => x.id === 'udp-cloud-routed'));
+  await f.run('reload');
+  assert.deepEqual((await f.read()).flows, [...udpFlows().filter(x => ['udp-external', 'udp-internet'].includes(x.id)), ...hairpinFlows()]);
+});
+test('UDP stop revokes owned flows and preserves same-port TCP', async t => {
+  const f = await udpFixture(t); await f.run('stop'); await f.run('stop');
+  // This fixture owns UDP egress only, so TCP Internet sessions are independent too.
+  assert.deepEqual((await f.read()).flows, hairpinFlows());
+});
+test('pre-upgrade TCP cleanup journal is replayed without deleting UDP tuples', async t => {
+  const f = await hairpinFixture(t);
+  const fs = await import('node:fs/promises');
+  await f.seed({ flows: [...hairpinFlows(), ...udpFlows()] });
+  await fs.writeFile(f.dir + '/runtime/hairpin-pending', 'P|' + guest + '|' + vip + '|50000|443|' + target + '|' + gateway + '|50000\n');
+  await f.run('reload');
+  assert.deepEqual((await f.read()).flows, [...hairpinFlows().filter(x => !x.id.startsWith('cloud-')), ...udpFlows()]);
 });
