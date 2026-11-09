@@ -1,55 +1,138 @@
-# Home self-hosting platform
+# HSP — Home Self-hosting Platform
 
-Terraform configuration for one Proxmox VE 9.x node and Pi-hole v6. Each VM or LXC gets a Simple SDN VNet, its own `/30`, a static IP, source IP/MAC filtering, and default-deny firewall rules. The EdgeRouter needs one aggregate static route and selected port forwards to guest IPs. No router VLANs are needed.
+**Terraform modules for a homelab where networking, DNS, and access rules belong together.**
 
-Declare a guest once in [the home inventory](environments/home/home.tfvars.example). Its DNS aliases can resolve directly to the guest or to a selected reverse proxy. Separate admin and family VPN roles generate different access rules.
+Declare your VMs and unprivileged LXCs in one inventory. HSP gives each guest
+its own network and static address, creates its Pi-hole DNS records, and builds
+firewall rules from the services and connections you declare.
 
-See the [role and firewall reference](docs/firewall-roles.md) for every role's automatic permissions, shared defaults, rule order, and configurable exceptions.
+HSP targets a single **Proxmox VE 9.x** node and **Pi-hole v6**. It uses Proxmox
+Simple SDN networks: each guest gets a `/30`, source IP/MAC filtering, and a
+default-deny firewall policy. Your router needs one aggregate static route;
+separate router VLANs are not required.
 
-Top-level `internet_egress_ports` allows outbound TCP/UDP ports or ICMP for every guest. Each guest's own list adds its extra permissions; both default to `[]`. Use `{ protocol = "icmp" }` without a port to allow IPv4 ICMP outside protected networks. The `monitoring` role automatically receives TCP/UDP access to all other declared guests and direct internet TCP 80/443. Incoming services are configured with `public_ports`.
+## What you can build
 
-Optional [HE IPv6 routing](docs/ipv6.md) adds one shared public IPv6 for explicit TCP port forwards and permitted outgoing TCP/UDP/ICMP. It is globally off by default. With HE on, the effective global/per-guest/role `internet_egress_ports` list applies to IPv6 too; local Pi-hole DNS stays IPv4-only. Pass the same shared HE var-file to both roots and follow the guide's ordered manual cutover.
+- **VMs and LXCs in one inventory**, with stable IDs, network slots, storage, and SSH keys.
+- **Explicit service access**, using guest roles, public ports, and connections between guests.
+- **Direct or proxy DNS aliases**, managed through the Pi-hole API.
+- **Persistent host routing** and optional shared IPv6 ingress and egress through an HE tunnel.
 
-Guests default to `type = "vm"`, using the global `vm_template_id` (renamed from `template_id`). Set `type = "lxc"` to use the global `lxc_template` OS archive and optional `mount_points = [{ path = "/srv/data", size_gb = 50 }]`. Containers are unprivileged and use the same roles, DNS and firewall rules. See [LXC configuration and storage](docs/deployment.md#lxc-guests-and-storage) for the full example, backup behavior, and migration notes. The current `/24` supports 64 guests total across both types.
+HSP provisions infrastructure. Install and configure VPNs, reverse proxies,
+application software, and backup schedules separately. Guests start stopped by
+default so you can inspect their networking before activation.
 
-VM guests can allocate separate data disks with `extra_disks = { scsi1 = { size_gb = 100, ssd = true } }`. Each disk defaults to the guest datastore and `backup = true`; format and mount it inside the VM after provisioning. Set guest-level `ssd = true` for root-disk SSD emulation, or `ssd` inside each extra disk; both default independently to `false`. See [extra VM disks](docs/deployment.md#extra-vm-disks) for storage overrides and lifecycle guidance.
+## Use HSP in your own project
 
-For raw LXC bind mounts and cgroup2 rules, configure per-guest `lxc_mounts` and `lxc_cgroups` plus host `proxmox_ssh` access. See the [GPU mount example](docs/deployment.md#raw-lxc-mounts-and-cgroups-over-ssh).
-
-For example, inside a guest declaration:
+Keep your inventory, credentials, and Terraform state in your own repository.
+Use HSP as a module, with provider connections configured in the calling root.
+For example, the platform inventory can be as small as:
 
 ```hcl
-dns = {
-  cloud      = { mode = "proxy", proxy_name = "proxy-private" }
-  cloud-host = { mode = "direct" }
+module "hsp" {
+  source = "git::https://github.com/wardpieters/hsp.git//modules/hsp?ref=da64fdf3b9dac3809d31f8a4d653fdcd203a7dfe"
+  providers = {
+    proxmox        = proxmox
+    pihole         = pihole
+    restful        = restful
+    system.ingress = system.ingress
+  }
+
+  node_name              = "pve"
+  platform_cidr          = "10.88.0.0/24"
+  host_address           = "192.0.2.10"
+  protected_cidrs        = ["192.0.2.0/24"]
+  bootstrap_admin_cidrs  = ["192.0.2.42/32"]
+  dns_servers           = ["192.0.2.53"]
+  ntp_servers           = []
+  domain                 = "home.example.com"
+  vm_template_id         = 9000
+  datastore_id           = "local-lvm"
+  ssh_public_keys        = ["REPLACE_WITH_YOUR_SSH_PUBLIC_KEY"]
+
+  guests = {
+    app = {
+      vm_id = 1001, slot = 1, vnet_id = "hsp1001"
+      dns = { app = { mode = "direct" } }
+    }
+  }
 }
 ```
 
-The `dns_records` module creates `cloud.{{HSP_DOMAIN}}` pointing to the declared private proxy and `cloud-host.{{HSP_DOMAIN}}` pointing to this guest, using Pi-hole's local DNS API. Every desired name is explicit; no wildcard, Pi-hole host file, or Pi-hole SSH access is needed.
+This snippet shows the module interface; the [starter example](examples/README.md)
+includes provider configuration, credentials, connection settings, host routing,
+and outputs. Its two-guest inventory demonstrates a private proxy calling an
+application on an explicitly allowed port. The in-repository examples use local
+sources. The starter guide shows pinned
+GitHub sources for consuming HSP from your own repository without copying its
+implementation.
 
-| Configuration | Resources |
-| --- | --- |
-| `environments/home` | SDN, VMs and LXCs, firewalls, and per-guest Pi-hole DNS records |
-| `environments/host-config` | Persistent Proxmox host routing, using Terraform's SSH file/service provider |
-| `modules/` | Reusable network, guest, DNS, and host configuration modules |
+The addresses above are documentation examples. Replace them, the IDs, the
+template/storage settings, and the SSH key before deployment. Pin a reviewed
+commit when upgrading HSP; Git sources use `?ref=`, not Terraform's `version`
+argument.
 
-Deploy using ordinary Terraform commands, after filling in the private variables and completing the prerequisites in the [deployment guide](docs/deployment.md):
+## Get started
+
+You will need Terraform **1.10 or later**, a prepared cloud-init VM template,
+Proxmox API access, Pi-hole API credentials, and SSH agent access to the host.
+Read the [deployment prerequisites](docs/deployment.md#prerequisites) first.
+
+1. Copy [the starter](examples/README.md) into your own repository.
+2. Fill in its shared connection settings and inventory; load credentials from your shell or secret manager.
+3. Plan host routing, review it, and apply it before provisioning guests.
+4. Plan the guest platform, inspect it, and follow the deployment guide for the first apply and activation.
 
 ```sh
-terraform -chdir=environments/home init
-terraform -chdir=environments/home plan -var-file=home.tfvars -parallelism=1 -out=home.tfplan
-terraform -chdir=environments/home apply -parallelism=1 home.tfplan
+# From your copied starter directory, after configuration and credential setup:
+terraform -chdir=host-config init
+terraform -chdir=host-config plan -out=hosts.tfplan
+terraform -chdir=home init
+terraform -chdir=home plan -parallelism=1 -out=home.tfplan
 ```
 
-Guests default to stopped. Inspect their networking and firewall enforcement, then set `started = true` in a second apply.
+Host routing and the guest platform use separate states. Keep state, saved plans,
+and credentials out of Git. The starter is for a new deployment; adopting
+existing resources requires a reviewed import or state migration.
 
-Local checks require Terraform, Make, and Node.js. They include mock-provider tests and a real REST provider test against a loopback-only API fixture:
+## Documentation
+
+| Guide | What it covers |
+| --- | --- |
+| [Starter example](examples/README.md) | Copyable files, settings, credentials, and first commands |
+| [Deployment](docs/deployment.md) | Prerequisites, storage, host routing, inspection, and activation |
+| [Firewall roles](docs/firewall-roles.md) | Roles, service dependencies, DNS, and access policies |
+| [Optional IPv6](docs/ipv6.md) | HE tunnel, shared public address, egress, and ordered cutover |
+| [Verification](docs/verification.md) | Automated coverage and live acceptance limits |
+| [Engineering history](docs/chapters/engineering.md) | Original designs and implementation records |
+
+Reusable modules live in `modules/`. The main entry points are `hsp`
+(guest platform), `connections` (typed connection settings), and `proxmox_host`
+(host routing). Supporting modules handle individual networks, guests, DNS,
+and optional IPv6 ingress.
+
+## Development
+
+Terraform, Make, and Node.js >=22 are required for repository checks:
 
 ```sh
 make init
 make check
 ```
 
-Providers are pinned to `bpg/proxmox` 0.118.1, `lukaspustina/pihole` 0.3.1, `magodo/restful` 0.25.2, and `neuspaces/system` 0.5.0. The home environment requires Terraform >=1.10 for its shared ephemeral API token; checks use Terraform 1.14.8 and Node.js >=22. The BPG SDN applier is marked experimental by its maintainer, so verify its lifecycle on disposable guests before migration.
+The checks validate the examples and modules, run native Terraform tests with
+mock providers, and exercise rendered helpers against isolated local fixtures.
+They do not deploy live infrastructure. Provider versions are constrained by
+the modules; example lock files make their selections reproducible.
 
-This provisions infrastructure. VPN, reverse proxy, application software, and existing guest migration are separate work. Application containers can also run inside the managed VMs. Keep state, plans, passwords, and private variables out of Git.
+The documentation site reads this README, the starter guide, and `docs/`:
+
+```sh
+make docs-install
+make docs-start
+make docs-build
+```
+
+For changes to guest or network behavior, include a focused regression test and
+update the relevant guide. The Proxmox SDN applier is experimental upstream;
+verify network lifecycle changes on disposable guests before a migration.

@@ -1,0 +1,9 @@
+{
+  "enabled": false,
+  "server_ipv4": "203.0.113.1",
+  "local_ipv4": "192.0.2.10",
+  "client_ipv6": "2001:db8:1::2/64",
+  "server_ipv6": "2001:db8:1::1",
+  "routed_prefix": "2001:db8:2::/64",
+  "ula_prefix": "fdab:cdef:1000::/48"
+}

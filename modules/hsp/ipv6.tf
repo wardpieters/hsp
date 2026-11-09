@@ -1,17 +1,3 @@
-# Pass the SAME -var-file=../he-ipv6.tfvars to home and host-config.
-# Missing teardown credentials fail against a reserved invalid hostname;
-# unused default-off configurations never connect or fall back to localhost.
-provider "system" {
-  alias = "ingress"
-  ssh {
-    host     = var.proxmox_ssh == null ? "disabled.invalid" : var.proxmox_ssh.host
-    user     = var.proxmox_ssh == null ? "root" : var.proxmox_ssh.user
-    port     = var.proxmox_ssh == null ? 22 : var.proxmox_ssh.port
-    host_key = var.proxmox_ssh == null ? null : var.proxmox_ssh.host_key
-    agent    = true
-  }
-  sudo = var.proxmox_ssh == null ? false : var.proxmox_ssh.user != "root"
-}
 variable "he_ipv6" {
   description = "Optional HE tunnel and shared public IPv6. Disabled unless explicitly enabled in both roots."
   type = object({
@@ -143,7 +129,7 @@ locals {
 }
 module "ipv6_ingress" {
   count            = var.he_ipv6.enabled && (length(local.he_ipv6_forwards) > 0 || length(local.he_ipv6_egress) > 0 || length(local.he_ipv6_hairpin) > 0) ? 1 : 0
-  source           = "../../modules/ipv6_ingress"
+  source           = "../ipv6_ingress"
   providers        = { system = system.ingress }
   proxmox_ssh      = var.proxmox_ssh
   public_address   = local.he_ipv6_public_address

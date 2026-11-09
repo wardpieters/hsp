@@ -1,22 +1,5 @@
-provider "proxmox" {
-  endpoint  = var.proxmox_endpoint
-  insecure  = var.proxmox_insecure_tls
-  api_token = var.proxmox_api_token
-}
-provider "restful" {
-  base_url = "${trimsuffix(var.proxmox_endpoint, "/")}/api2/json"
-  client   = { tls_insecure_skip_verify = var.proxmox_insecure_tls }
-  security = {
-    apikey = [{ in = "header", name = "Authorization", value = "PVEAPIToken=${var.proxmox_api_token}" }]
-  }
-}
-provider "pihole" {
-  url          = var.pihole_url
-  password     = var.pihole_password
-  insecure_tls = var.pihole_insecure_tls
-}
 module "network" {
-  source          = "../../modules/platform_network"
+  source          = "../platform_network"
   node_name       = var.node_name
   platform_cidr   = var.platform_cidr
   protected_cidrs = var.protected_cidrs
@@ -27,7 +10,7 @@ module "network" {
 }
 module "service" {
   for_each               = var.guests
-  source                 = "../../modules/service_vm"
+  source                 = "../service_vm"
   node_name              = var.node_name
   network                = module.network.networks[each.key]
   ipv6_forwarded_ports   = [for f in values(local.he_ipv6_forwards) : { protocol = f.protocol, port = f.port } if f.guest == each.key]

@@ -1,22 +1,30 @@
 variable "he_ipv6" {
   type = object({
-    server_ipv4   = string, local_ipv4 = string, client_ipv6 = string, server_ipv6 = string,
-    routed_prefix = string, ula_prefix = string, mtu = optional(number, 1480)
+    server_ipv4     = string, local_ipv4 = string, client_ipv6 = string, server_ipv6 = string,
+    routed_prefix   = string, ula_prefix = string, mtu = optional(number, 1480),
+    protected_cidrs = optional(list(string), [])
   })
   default = null
   validation {
     condition = var.he_ipv6 == null ? true : try(
-      can(cidrnetmask("${var.he_ipv6.server_ipv4}/32")) && can(cidrnetmask("${var.he_ipv6.local_ipv4}/32")) &&
+      can(cidrnetmask("${var.he_ipv6.server_ipv4}/32")) &&
+      cidrhost("${var.he_ipv6.server_ipv4}/32", 0) == var.he_ipv6.server_ipv4 &&
+      can(cidrnetmask("${var.he_ipv6.local_ipv4}/32")) &&
       strcontains(var.he_ipv6.client_ipv6, ":") && split("/", var.he_ipv6.client_ipv6)[1] == "64" &&
+      cidrhost("${split("/", var.he_ipv6.client_ipv6)[0]}/3", 0) == "2000::" &&
+      strcontains(var.he_ipv6.server_ipv6, ":") &&
       cidrhost("${var.he_ipv6.server_ipv6}/64", 0) == cidrhost(var.he_ipv6.client_ipv6, 0) &&
       cidrhost("${var.he_ipv6.server_ipv6}/128", 0) != cidrhost("${split("/", var.he_ipv6.client_ipv6)[0]}/128", 0) &&
-      split("/", var.he_ipv6.routed_prefix)[1] == "64" && cidrhost(var.he_ipv6.routed_prefix, 0) == split("/", var.he_ipv6.routed_prefix)[0] &&
+      split("/", var.he_ipv6.routed_prefix)[1] == "64" &&
+      cidrhost(var.he_ipv6.routed_prefix, 0) == split("/", var.he_ipv6.routed_prefix)[0] &&
       cidrhost("${split("/", var.he_ipv6.routed_prefix)[0]}/3", 0) == "2000::" &&
       cidrhost(var.he_ipv6.routed_prefix, 0) != cidrhost(var.he_ipv6.client_ipv6, 0) &&
-      split("/", var.he_ipv6.ula_prefix)[1] == "48" && cidrhost(var.he_ipv6.ula_prefix, 0) == split("/", var.he_ipv6.ula_prefix)[0] &&
+      split("/", var.he_ipv6.ula_prefix)[1] == "48" &&
+      cidrhost(var.he_ipv6.ula_prefix, 0) == split("/", var.he_ipv6.ula_prefix)[0] &&
       cidrhost("${split("/", var.he_ipv6.ula_prefix)[0]}/8", 0) == "fd00::" &&
-    var.he_ipv6.mtu >= 1280 && var.he_ipv6.mtu <= 1480 && floor(var.he_ipv6.mtu) == var.he_ipv6.mtu, false)
-    error_message = "HE host routing requires valid IPv4 endpoints, distinct tunnel IPv6 addresses in one /64, a separate global service /64, ULA /48 and integer MTU 1280..1480."
+      var.he_ipv6.mtu >= 1280 && var.he_ipv6.mtu <= 1480 && floor(var.he_ipv6.mtu) == var.he_ipv6.mtu &&
+    alltrue([for c in var.he_ipv6.protected_cidrs : strcontains(c, ":") && cidrhost(c, 0) == split("/", c)[0]]), false)
+    error_message = "Enabled HE requires valid IPv4 endpoints, distinct global tunnel IPv6 endpoints in one /64, a separate canonical global routed /64, canonical fd00::/8 ULA /48, integer MTU 1280..1480, IPv6 protected CIDRs."
   }
 }
 locals {
