@@ -28,7 +28,7 @@ run "hairpin_vm" {
   command = plan
   variables {
     network              = { address = "10.77.0.2", gateway = "10.77.0.1", cidr = "10.77.0.0/30", vnet_id = "hsp100", ipv6 = { cidr = "fd42:77:1:2::/64", gateway = "fd42:77:1:2::1", address = "fd42:77:1:2::2" } }
-    ipv6_forwarded_ports = [443]
+    ipv6_forwarded_ports = [{ protocol = "tcp", port = 443 }]
     protected_ipv6_cidrs = ["2001:470:1f15:4d6::/64"]
     ipv6_hairpin_out     = [{ public_address = "2001:470:1f15:4d6::2", port = 443 }, { public_address = "2001:470:1f15:4d6::2", port = 443 }]
     ipv6_hairpin_in      = [{ gateway = "fd42:77:1:2::1", port = 443 }, { gateway = "fd42:77:1:2::1", port = 443 }]
@@ -62,7 +62,7 @@ run "hairpin_lxc" {
   command = plan
   variables {
     network              = { address = "10.77.0.2", gateway = "10.77.0.1", cidr = "10.77.0.0/30", vnet_id = "hsp100", ipv6 = { cidr = "fd42:77:1:2::/64", gateway = "fd42:77:1:2::1", address = "fd42:77:1:2::2" } }
-    ipv6_forwarded_ports = [443]
+    ipv6_forwarded_ports = [{ protocol = "tcp", port = 443 }]
     protected_ipv6_cidrs = ["2001:470:1f15:4d6::/64"]
     ipv6_hairpin_out     = [{ public_address = "2001:470:1f15:4d6::2", port = 443 }, { public_address = "2001:470:1f15:4d6::2", port = 443 }]
     ipv6_hairpin_in      = [{ gateway = "fd42:77:1:2::1", port = 443 }, { gateway = "fd42:77:1:2::1", port = 443 }]
@@ -89,7 +89,7 @@ run "reject_wrong_gateway" {
   command = plan
   variables {
     network              = { address = "10.77.0.2", gateway = "10.77.0.1", cidr = "10.77.0.0/30", vnet_id = "hsp100", ipv6 = { cidr = "fd42:77:1:2::/64", gateway = "fd42:77:1:2::1", address = "fd42:77:1:2::2" } }
-    ipv6_forwarded_ports = [443]
+    ipv6_forwarded_ports = [{ protocol = "tcp", port = 443 }]
     ipv6_hairpin_in      = [{ gateway = "fd42:77:1:2::3", port = 443 }]
   }
   expect_failures = [var.ipv6_hairpin_in]
@@ -167,7 +167,7 @@ run "reject_incoming_zero_port" {
   command = plan
   variables {
     network              = { address = "10.77.0.2", gateway = "10.77.0.1", cidr = "10.77.0.0/30", vnet_id = "hsp100", ipv6 = { cidr = "fd42:77:1:2::/64", gateway = "fd42:77:1:2::1", address = "fd42:77:1:2::2" } }
-    ipv6_forwarded_ports = [443]
+    ipv6_forwarded_ports = [{ protocol = "tcp", port = 443 }]
     ipv6_hairpin_in      = [{ gateway = "fd42:77:1:2::1", port = 0 }]
   }
   expect_failures = [var.ipv6_hairpin_in]
@@ -178,8 +178,44 @@ run "reject_incoming_overflow_port" {
   command = plan
   variables {
     network              = { address = "10.77.0.2", gateway = "10.77.0.1", cidr = "10.77.0.0/30", vnet_id = "hsp100", ipv6 = { cidr = "fd42:77:1:2::/64", gateway = "fd42:77:1:2::1", address = "fd42:77:1:2::2" } }
-    ipv6_forwarded_ports = [443]
+    ipv6_forwarded_ports = [{ protocol = "tcp", port = 443 }]
     ipv6_hairpin_in      = [{ gateway = "fd42:77:1:2::1", port = 65536 }]
   }
   expect_failures = [var.ipv6_hairpin_in]
+}
+
+run "hairpin_udp" {
+  command = plan
+  variables {
+    public_ports         = [{ protocol = "udp", port = 443 }]
+    network              = { address = "10.77.0.2", gateway = "10.77.0.1", cidr = "10.77.0.0/30", vnet_id = "hsp100", ipv6 = { cidr = "fd42:77:1:2::/64", gateway = "fd42:77:1:2::1", address = "fd42:77:1:2::2" } }
+    ipv6_forwarded_ports = [{ protocol = "udp", port = 443 }]
+    protected_ipv6_cidrs = ["2001:470:1f15:4d6::/64"]
+    ipv6_hairpin_out     = [{ public_address = "2001:470:1f15:4d6::2", protocol = "udp", port = 443 }, { public_address = "2001:470:1f15:4d6::2", protocol = "udp", port = 443 }]
+    ipv6_hairpin_in      = [{ gateway = "fd42:77:1:2::1", protocol = "udp", port = 443 }, { gateway = "fd42:77:1:2::1", protocol = "udp", port = 443 }]
+  }
+  assert {
+    condition     = length([for r in output.rules : r if r.comment == "hsp:ipv6:hairpin-out:udp:443" && r.type == "out" && r.action == "ACCEPT" && r.source == "fd42:77:1:2::2/128" && r.dest == "2001:470:1f15:4d6::2/128" && r.proto == "udp" && r.dport == "443"]) == 1
+    error_message = "Hairpin grants must be exact, deduplicated, ordered and preserve source enforcement."
+  }
+  assert {
+    condition     = length([for r in output.rules : r if r.comment == "hsp:ipv6:hairpin-in:udp:443" && r.type == "in" && r.action == "ACCEPT" && r.source == "fd42:77:1:2::1/128" && r.dest == "fd42:77:1:2::2/128" && r.proto == "udp" && r.dport == "443"]) == 1
+    error_message = "Hairpin grants must be exact, deduplicated, ordered and preserve source enforcement."
+  }
+  assert {
+    condition     = index([for r in output.rules : r.comment], "hsp:ipv6:hairpin-out:udp:443") < index([for r in output.rules : r.comment], "hsp:ipv6:protect-out:2001:470:1f15:4d6::/64")
+    error_message = "Hairpin grants must be exact, deduplicated, ordered and preserve source enforcement."
+  }
+  assert {
+    condition     = index([for r in output.rules : r.comment], "hsp:ipv6:deny-control:out:137") < index([for r in output.rules : r.comment], "hsp:ipv6:hairpin-out:udp:443") && index([for r in output.rules : r.comment], "hsp:ipv6:hairpin-in:udp:443") < index([for r in output.rules : r.comment], "hsp:ipv6:protect-in:fc00::/7")
+    error_message = "Hairpin grants must be exact, deduplicated, ordered and preserve source enforcement."
+  }
+  assert {
+    condition     = length([for r in output.rules : r if r.action == "ACCEPT" && r.proto == "udp" && r.type == "out" && r.dest == "::/0"]) == 0
+    error_message = "Hairpin grants must be exact, deduplicated, ordered and preserve source enforcement."
+  }
+  assert {
+    condition     = toset([for c in proxmox_virtual_environment_firewall_ipset.this.cidr : c.name]) == toset(["10.77.0.2", "fd42:77:1:2::2", "::"])
+    error_message = "Hairpin grants must be exact, deduplicated, ordered and preserve source enforcement."
+  }
 }

@@ -28,7 +28,7 @@ output "ipv6_ingress" {
 output "ipv6_networks" { value = local.he_ipv6_networks }
 output "ipv6_port_forwards" {
   value = { for key, f in local.he_ipv6_forwards : key => {
-    public_address = local.he_ipv6_public_address, protocol = "tcp", port = f.port,
+    public_address = local.he_ipv6_public_address, protocol = f.protocol, port = f.port,
     guest          = f.guest, target_address = f.address, vnet_id = f.vnet_id
   } }
 }
@@ -47,7 +47,7 @@ output "ipv6_host_requirements" {
 output "ipv6_hairpin" {
   value = { for key, h in local.he_ipv6_hairpin : key => {
     source_guest              = h.source_guest, source_address = h.source_address, source_vnet_id = h.source_vnet_id,
-    forward_key               = h.forward_key, public_address = local.he_ipv6_public_address, protocol = "tcp", port = h.port,
+    forward_key               = h.forward_key, public_address = local.he_ipv6_public_address, protocol = h.protocol, port = h.port,
     target_guest              = h.target_guest, target_address = h.target_address, target_vnet_id = h.target_vnet_id,
     translated_source_address = h.target_gateway
   } }
